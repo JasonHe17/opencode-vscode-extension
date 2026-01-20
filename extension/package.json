@@ -2,7 +2,7 @@
   "name": "opencode-gui",
   "displayName": "OpenCode",
   "description": "Graphical user interface for OpenCode AI",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "opencode-ai",
   "engines": {
     "vscode": "^1.94.0"
@@ -37,6 +37,11 @@
           "id": "sessionTree",
           "name": "Sessions",
           "when": "opencode.enabled"
+        },
+        {
+          "id": "opencodeChat",
+          "name": "Chat",
+          "type": "webview"
         }
       ]
     },

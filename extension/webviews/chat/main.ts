@@ -3,11 +3,27 @@ const vscode = acquireVsCodeApi()
 
 const messagesContainer = document.getElementById("messages")!
 const messageInput = document.getElementById("messageInput") as HTMLTextAreaElement
-const sendButton = document.getElementById("sendButton")!
-const attachButton = document.getElementById("attachButton")!
+const sendButton = document.getElementById("sendButton") as HTMLButtonElement
+const attachButton = document.getElementById("attachButton") as HTMLButtonElement
 const fileSuggestions = document.getElementById("fileSuggestions")!
+const agentSelect = document.getElementById("agentSelect") as HTMLSelectElement
+const modelSelect = document.getElementById("modelSelect") as HTMLSelectElement
 
 let messages: any[] = []
+
+agentSelect.addEventListener("change", () => {
+  postMessage({
+    type: "changeAgent",
+    agent: agentSelect.value
+  })
+})
+
+modelSelect.addEventListener("change", () => {
+  postMessage({
+    type: "changeModel",
+    model: modelSelect.value
+  })
+})
 
 function postMessage(message: any): void {
   vscode.postMessage(message)
@@ -172,6 +188,7 @@ function escapeHtml(text: string): string {
 
 window.addEventListener("message", (event) => {
   const message = event.data
+  console.log("Webview received message:", message.type, message)
 
   switch (message.type) {
     case "messageAdd":
@@ -204,8 +221,61 @@ window.addEventListener("message", (event) => {
     case "clearSuggestions":
       fileSuggestions.hidden = true
       break
+
+    case "serverStatus":
+      updateSelectors(message.agents, message.models)
+      break
   }
 })
+
+function updateSelectors(agents: string[], modelGroups: Array<{ providerID: string; models: string[] }>): void {
+  console.log("Updating selectors with models:", modelGroups)
+  
+  // Update Agents
+  const currentAgent = agentSelect.value
+  agentSelect.innerHTML = ""
+  agents.forEach(agent => {
+    const option = document.createElement("option")
+    option.value = agent
+    option.textContent = agent
+    if (agent === currentAgent) option.selected = true
+    agentSelect.appendChild(option)
+  })
+
+  // Update Models
+  const currentModel = modelSelect.value
+  modelSelect.innerHTML = ""
+  
+  // Add default/auto option
+  const defaultOpt = document.createElement("option")
+  defaultOpt.value = ""
+  defaultOpt.textContent = "Default Model"
+  modelSelect.appendChild(defaultOpt)
+
+  if (modelGroups && modelGroups.length > 0) {
+    modelGroups.forEach(group => {
+      const optgroup = document.createElement("optgroup")
+      optgroup.label = group.providerID
+      group.models.forEach(model => {
+        const option = document.createElement("option")
+        const value = `${group.providerID}/${model}`
+        option.value = value
+        option.textContent = model
+        if (value === currentModel) option.selected = true
+        optgroup.appendChild(option)
+      })
+      modelSelect.appendChild(optgroup)
+    })
+  } else {
+    console.warn("No models received from server")
+  }
+}
+
+// Initial init request
+setTimeout(() => {
+  console.log("Sending init request...");
+  vscode.postMessage({ type: "init" });
+}, 100);
 
 function updateMessagePart(messageId: string, partId: string, part: any): void {
   const message = messages.find((m) => m.id === messageId)

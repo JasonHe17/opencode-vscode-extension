@@ -1,18 +1,15 @@
 import * as vscode from "vscode"
 import { getSettingsPanel } from "../settings/SettingsPanel.js"
 
+import { getAgentSelector } from "../agent/AgentSelector.js"
+
 export async function openSettings(): Promise<void> {
   const settingsPanel = getSettingsPanel()
   settingsPanel.show()
 }
 
 export async function selectAgent(_sessionId?: string): Promise<void> {
-  const agent = await vscode.window.showQuickPick(
-    ["build", "plan", "explore", "general"],
-    {
-      placeHolder: "Select an agent"
-    }
-  )
+  const agent = await getAgentSelector().showAgentPicker(_sessionId)
 
   if (agent) {
     vscode.window.showInformationMessage(`Selected agent: ${agent}`)

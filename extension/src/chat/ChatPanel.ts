@@ -2,7 +2,10 @@ import * as vscode from "vscode"
 import { SessionManager } from "../session/SessionManager.js"
 import { PermissionDialog } from "./PermissionDialog.js"
 import { OpenCodeClient } from "../client/OpenCodeClient.js"
+import { getProviderSelector } from "../provider/ProviderSelector.js"
 import type { MessagePart, BusEvent } from "../client/types.js"
+
+import { getAgentSelector } from "../agent/AgentSelector.js"
 
 export type MessageRole = "user" | "assistant" | "system"
 
@@ -16,12 +19,13 @@ export interface ChatMessage {
 
 export class ChatPanel {
   private static instance: ChatPanel | null = null
-  private panel: vscode.WebviewPanel | null = null
+  private panel: vscode.WebviewPanel | vscode.WebviewView | null = null
   private sessionManager: SessionManager
   private client: OpenCodeClient
   private permissionDialog: PermissionDialog
   private currentSessionId: string | null = null
   private currentAgent: string = "build"
+  private currentModel: { providerID: string; modelID: string } | undefined = undefined
   private isWaiting: boolean = false
   private disposables: vscode.Disposable[] = []
   private eventListenerRemover: (() => void) | null = null
@@ -214,7 +218,7 @@ export class ChatPanel {
   }
 
   show(sessionId?: string): void {
-    if (this.panel) {
+    if (this.panel && 'reveal' in this.panel) {
       this.panel.reveal()
       if (sessionId) {
         this.switchSession(sessionId)
@@ -247,7 +251,29 @@ export class ChatPanel {
     }, null, this.disposables)
   }
 
-  private setupWebview(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): void {
+  resolveWebviewView(webviewView: vscode.WebviewView, extensionUri: vscode.Uri): void {
+    this.panel = webviewView
+    
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(extensionUri, "webviews", "chat")
+      ]
+    }
+
+    this.setupWebview(webviewView, extensionUri)
+    
+    // Auto-init when sidebar is resolved
+    setTimeout(() => {
+      this.handleInit();
+    }, 500);
+
+    webviewView.onDidDispose(() => {
+      this.panel = null
+    })
+  }
+
+  private setupWebview(panel: vscode.WebviewPanel | vscode.WebviewView, extensionUri: vscode.Uri): void {
     const htmlPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "index.html")
     const jsPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "main.js")
     
@@ -268,12 +294,25 @@ export class ChatPanel {
 
   private async handleWebviewMessage(message: any): Promise<void> {
     switch (message.type) {
+      case "init":
+        await this.handleInit()
+        break
+
       case "sendMessage":
         await this.handleSendMessage(message)
         break
 
       case "changeAgent":
         this.currentAgent = message.agent
+        break
+
+      case "changeModel":
+        if (message.model) {
+          const [providerID, modelID] = message.model.split("/")
+          this.currentModel = modelID ? { providerID, modelID } : undefined
+        } else {
+          this.currentModel = undefined
+        }
         break
 
       case "attachFile":
@@ -289,11 +328,48 @@ export class ChatPanel {
     }
   }
 
+  private async handleInit(): Promise<void> {
+    try {
+      console.log("[ChatPanel] Initializing and loading models from server...")
+      const status = await this.client.getServerStatus()
+      const models = await this.client.getModels()
+      
+      // Update ProviderSelector cache
+      await getProviderSelector().loadProvidersFromServer()
+      
+      console.log("[ChatPanel] Models loaded:", JSON.stringify(models))
+      
+      const agents = (status.agents && status.agents.length > 0) 
+        ? status.agents 
+        : getAgentSelector().getAgentList().map(a => a.id);
+      
+      const response = {
+        type: "serverStatus",
+        agents: agents,
+        models: models
+      };
+      console.log("[ChatPanel] Posting to webview:", JSON.stringify(response));
+      this.postMessageToWebview(response)
+    } catch (error) {
+      console.error("[ChatPanel] Failed to handle init:", error)
+      // Fallback with minimal info if server is starting
+      this.postMessageToWebview({
+        type: "serverStatus",
+        agents: getAgentSelector().getAgentList().map(a => a.id),
+        models: []
+      })
+    }
+  }
+
   private async handleSendMessage(message: any): Promise<void> {
-    const { sessionId, agent, text } = message
+    const { sessionId, agent, model, text } = message
 
     if (agent) {
       this.currentAgent = agent
+    }
+    if (model) {
+      const [providerID, modelID] = model.split("/")
+      this.currentModel = modelID ? { providerID, modelID } : undefined
     }
 
     // Store last user message for duplicate detection
@@ -323,7 +399,7 @@ export class ChatPanel {
 
       await this.client.prompt(targetSessionId, {
         agent: this.currentAgent,
-        model: undefined,
+        model: this.currentModel,
         parts
       })
 
@@ -398,7 +474,9 @@ export class ChatPanel {
   }
 
   dispose(): void {
-    this.panel?.dispose()
+    if (this.panel && 'dispose' in this.panel) {
+      this.panel.dispose()
+    }
     this.panel = null
     this.eventListenerRemover?.()
     this.disposables.forEach((d) => d.dispose())

@@ -40,7 +40,9 @@
     defaultAgent: document.getElementById('defaultAgent'),
     saveDefaultAgent: document.getElementById('saveDefaultAgent'),
     showToolOutput: document.getElementById('showToolOutput'),
-    saveChatSettings: document.getElementById('saveChatSettings')
+    saveChatSettings: document.getElementById('saveChatSettings'),
+    customUrlGroup: document.getElementById('customUrlGroup'),
+    customUrl: document.getElementById('customUrl')
   };
 
   function init() {
@@ -179,14 +181,26 @@
     elements.providerSelect.addEventListener('change', (e) => {
       const provider = e.target.value;
       elements.apiKey.value = apiKeys[provider] || '';
+      
+      if (provider === 'custom') {
+        elements.customUrlGroup.classList.remove('hidden');
+      } else {
+        elements.customUrlGroup.classList.add('hidden');
+      }
     });
 
     elements.addApiKey.addEventListener('click', () => {
       const provider = elements.providerSelect.value;
       const key = elements.apiKey.value.trim();
+      const customUrl = elements.customUrl.value.trim();
       
       if (!key) {
         alert('Please enter an API key');
+        return;
+      }
+
+      if (provider === 'custom' && !customUrl) {
+        alert('Please enter an API address for Custom provider');
         return;
       }
 
@@ -197,7 +211,8 @@
       vscode.postMessage({
         type: 'saveApiKey',
         provider,
-        key
+        key,
+        baseUrl: provider === 'custom' ? customUrl : undefined
       });
     });
 

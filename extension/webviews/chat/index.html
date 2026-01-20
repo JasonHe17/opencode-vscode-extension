@@ -275,23 +275,57 @@
 
     .input-actions {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 8px;
       padding-top: 4px;
     }
 
-    .input-hints {
-      font-size: 12px;
+    .agent-model-selectors {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .selector-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .selector-group label {
+      font-size: 11px;
       color: var(--vscode-descriptionForeground);
     }
 
+    .selector-group select {
+      background-color: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-input-border);
+      color: var(--vscode-foreground);
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .input-actions-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .input-hints {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 4px;
+    }
+
     .input-hints kbd {
-      padding: 2px 6px;
+      padding: 1px 4px;
       border-radius: 3px;
       background-color: var(--vscode-keybindingLabel-background);
       color: var(--vscode-keybindingLabel-foreground);
       font-family: var(--vscode-editor-font-family);
-      font-size: 11px;
+      font-size: 10px;
       margin: 0 2px;
     }
 
@@ -301,35 +335,24 @@
     }
 
     .icon-button {
-      padding: 8px 12px;
+      padding: 4px 8px;
       border: 1px solid var(--vscode-button-secondaryBackground);
-      border-radius: 6px;
+      border-radius: 4px;
       background-color: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
-      font-family: var(--vscode-font-family);
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
-      transition: background-color 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .icon-button:hover {
-      background-color: var(--vscode-button-secondaryHoverBackground);
     }
 
     .send-button {
-      padding: 8px 20px;
+      padding: 4px 12px;
       border: none;
-      border-radius: 6px;
+      border-radius: 4px;
       background-color: var(--vscode-button-primaryBackground);
       color: var(--vscode-button-primaryForeground);
-      font-family: var(--vscode-font-family);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       cursor: pointer;
-      transition: opacity 0.2s;
     }
 
     .send-button:hover {
@@ -462,17 +485,6 @@
     <div class="chat-container">
       <header class="header">
         <div class="session-title" id="sessionTitle">New Session</div>
-        <div class="header-controls">
-          <div class="agent-selector">
-            <label for="agentSelect">Agent:</label>
-            <select id="agentSelect">
-              <option value="build">build</option>
-              <option value="test">test</option>
-              <option value="optimize">optimize</option>
-              <option value="explain">explain</option>
-            </select>
-          </div>
-        </div>
       </header>
 
       <div class="messages" id="messages"></div>
@@ -488,13 +500,34 @@
             ></textarea>
           </div>
           <div class="input-actions">
-            <div class="input-hints">
-              <span>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for newline</span>
+            <div class="input-actions-row">
+              <div class="agent-model-selectors">
+                <div class="selector-group">
+                  <label for="agentSelect">Agent:</label>
+                  <select id="agentSelect">
+                    <option value="build">build</option>
+                    <option value="test">test</option>
+                    <option value="optimize">optimize</option>
+                    <option value="explain">explain</option>
+                  </select>
+                </div>
+                <div class="selector-group">
+                  <label for="modelSelect">Model:</label>
+                  <select id="modelSelect">
+                    <option value="gpt-4o">GPT-4o</option>
+                    <option value="claude-3-5-sonnet">Claude 3.5</option>
+                    <option value="deepseek-v3">DeepSeek V3</option>
+                  </select>
+                </div>
+              </div>
+              <div class="input-actions-right">
+                <button class="icon-button" id="attachButton" title="Attach file">📎</button>
+                <button class="send-button" id="sendButton" disabled>Send</button>
+              </div>
             </div>
-            <div class="input-actions-right">
-              <button class="icon-button" id="attachButton" title="Attach file">📎</button>
-              <button class="send-button" id="sendButton" disabled>Send</button>
-            </div>
+          </div>
+          <div class="input-hints">
+            <span>Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for newline</span>
           </div>
         </div>
       </div>

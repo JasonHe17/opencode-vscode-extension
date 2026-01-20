@@ -42,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     initializePermissionSystem()
     initializeChatPanel(context)
     initializeSidebar(context)
+    initializeSidebarChat(context)
     initializeSettingsPanel(context)
     initializeCommands(context)
     initializeStatusBar()
@@ -201,6 +202,19 @@ function initializeSidebar(context: vscode.ExtensionContext): void {
   console.log("[OpenCode] Sidebar initialized")
 }
 
+function initializeSidebarChat(context: vscode.ExtensionContext): void {
+  const sessionManager = getSessionManager(context)
+  const chatPanel = getChatPanel(sessionManager)
+  
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider("opencodeChat", {
+      resolveWebviewView(webviewView) {
+        chatPanel.resolveWebviewView(webviewView, context.extensionUri)
+      }
+    })
+  )
+}
+
 function initializeSettingsPanel(context: vscode.ExtensionContext): void {
   const settingsPanel = getSettingsPanel()
   settingsPanel.setContext(context)
@@ -221,30 +235,12 @@ function initializeCommands(context: vscode.ExtensionContext): void {
 }
 
 function initializeStatusBar(): void {
-  sessionStatusBarItem = vscode.window.createStatusBarItem(
+  serverStatusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
     100
   )
-  sessionStatusBarItem.command = "opencode.chat.open"
-  sessionStatusBarItem.tooltip = "Open Chat"
-  updateSessionStatusBar()
-  sessionStatusBarItem.show()
-
-  agentStatusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    99
-  )
-  agentStatusBarItem.command = "opencode.config.selectAgent"
-  agentStatusBarItem.tooltip = "Select AI Agent"
-  updateAgentStatusBar()
-  agentStatusBarItem.show()
-
-  serverStatusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    98
-  )
   serverStatusBarItem.command = "opencode.config.openSettings"
-  serverStatusBarItem.tooltip = "OpenCode Server Status"
+  serverStatusBarItem.tooltip = "OpenCode Settings"
   updateServerStatusBar(undefined, false)
   serverStatusBarItem.show()
 
@@ -252,23 +248,11 @@ function initializeStatusBar(): void {
 }
 
 function updateSessionStatusBar(): void {
-  const sessionManager = getSessionManager()
-  const activeSession = sessionManager.getActiveSession()
-
-  if (activeSession) {
-    sessionStatusBarItem.text = `$(rocket) OpenCode: ${activeSession.title}`
-    sessionStatusBarItem.show()
-  } else {
-    sessionStatusBarItem.text = "$(rocket) OpenCode"
-    sessionStatusBarItem.show()
-  }
+  // Removed
 }
 
 function updateAgentStatusBar(): void {
-  const settings = getSettingsManager()
-  const defaultAgent = settings.get<string>("opencode.defaultAgent", "build")
-
-  agentStatusBarItem.text = `$(sparkle) Agent: ${defaultAgent}`
+  // Removed
 }
 
 function updateServerStatusBar(_connected?: boolean, _auto?: boolean): void {

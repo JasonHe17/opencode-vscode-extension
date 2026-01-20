@@ -304,8 +304,19 @@
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
           <option value="google">Google</option>
-          <option value="custom">Custom</option>
+          <option value="mistral">Mistral</option>
+          <option value="cohere">Cohere</option>
+          <option value="replicate">Replicate</option>
+          <option value="perplexity">Perplexity</option>
+          <option value="groq">Groq</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="ollama">Ollama</option>
+          <option value="custom">Custom / Other</option>
         </select>
+      </div>
+      <div class="form-group hidden" id="customUrlGroup">
+        <label for="customUrl">API Address (Base URL)</label>
+        <input type="text" id="customUrl" placeholder="https://api.example.com/v1">
       </div>
       <div class="form-group">
         <label for="apiKey">API Key</label>

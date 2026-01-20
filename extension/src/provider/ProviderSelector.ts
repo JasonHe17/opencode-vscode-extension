@@ -36,38 +36,7 @@ export class ProviderSelector {
   }
 
   private loadBuiltInProviders(): void {
-    const providers: ProviderInfo[] = [
-      {
-        id: "openai",
-        name: "OpenAI",
-        models: [
-          { id: "gpt-4o", name: "GPT-4 Omni", contextWindow: 128000 },
-          { id: "gpt-4-turbo", name: "GPT-4 Turbo", contextWindow: 128000 },
-          { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", contextWindow: 16385 }
-        ]
-      },
-      {
-        id: "anthropic",
-        name: "Anthropic",
-        models: [
-          { id: "claude-3-opus", name: "Claude 3 Opus", contextWindow: 200000 },
-          { id: "claude-3-sonnet", name: "Claude 3 Sonnet", contextWindow: 200000 },
-          { id: "claude-3-haiku", name: "Claude 3 Haiku", contextWindow: 200000 }
-        ]
-      },
-      {
-        id: "google",
-        name: "Google",
-        models: [
-          { id: "gemini-pro", name: "Gemini Pro", contextWindow: 91728 },
-          { id: "gemini-ultra", name: "Gemini Ultra", contextWindow: 1000000 }
-        ]
-      }
-    ]
-
-    providers.forEach((provider) => {
-      this.providers.set(provider.id, provider)
-    })
+    // Empty, we load from server
   }
 
   async showProviderPicker(_sessionId?: string): Promise<string | undefined> {
@@ -147,7 +116,15 @@ export class ProviderSelector {
     if (!this.client) return
 
     try {
-      // TODO: Implement loading providers from server
+      const models = await this.client.getModels()
+      this.providers.clear()
+      for (const p of models) {
+        this.providers.set(p.providerID, {
+          id: p.providerID,
+          name: p.providerID,
+          models: p.models.map((m: string) => ({ id: m, name: m }))
+        })
+      }
     } catch (error) {
       console.error("Failed to load providers from server:", error)
     }

@@ -3,6 +3,7 @@
   
   let currentSessionId = null;
   let currentAgent = 'build';
+  let currentModel = null;
   let isTyping = false;
 
   const messagesContainer = document.getElementById('messages');
@@ -10,6 +11,7 @@
   const sendButton = document.getElementById('sendButton');
   const attachButton = document.getElementById('attachButton');
   const agentSelect = document.getElementById('agentSelect');
+  const modelSelect = document.getElementById('modelSelect');
   const sessionTitle = document.getElementById('sessionTitle');
   const fileSuggestions = document.getElementById('fileSuggestions');
 
@@ -26,6 +28,7 @@
     if (state) {
       currentSessionId = state.sessionId;
       currentAgent = state.agent || 'build';
+      currentModel = state.model || null;
       if (state.sessionTitle) {
         sessionTitle.textContent = state.sessionTitle;
       }
@@ -37,6 +40,7 @@
     vscode.setState({
       sessionId: currentSessionId,
       agent: currentAgent,
+      model: currentModel,
       sessionTitle: sessionTitle.textContent
     });
   }
@@ -68,6 +72,15 @@
       vscode.postMessage({
         type: 'changeAgent',
         agent: currentAgent
+      });
+    });
+
+    modelSelect.addEventListener('change', (e) => {
+      currentModel = e.target.value;
+      saveState();
+      vscode.postMessage({
+        type: 'changeModel',
+        model: currentModel
       });
     });
 
@@ -215,6 +228,7 @@
       type: 'sendMessage',
       sessionId: currentSessionId,
       agent: currentAgent,
+      model: currentModel,
       text: text
     });
   }
@@ -224,7 +238,7 @@
     messageDiv.className = `message ${role}`;
 
     const icon = role === 'user' ? '👤' : '🤖';
-    const roleName = role === 'user' ? 'You' : currentAgent;
+    const roleName = role === 'user' ? 'You' : (messageDiv.dataset.agent || currentAgent);
 
     let attachmentsHtml = '';
     if (attachments && attachments.length > 0) {
@@ -414,6 +428,23 @@
         if (message.title) {
           sessionTitle.textContent = message.title;
           saveState();
+        }
+        break;
+
+      case 'serverStatus':
+        if (message.agents) {
+          agentSelect.innerHTML = message.agents.map(agent => 
+            `<option value="${agent}" ${agent === currentAgent ? 'selected' : ''}>${agent}</option>`
+          ).join('');
+        }
+        if (message.models) {
+          modelSelect.innerHTML = '<option value="">Default Model</option>' + 
+            message.models.map(p => 
+              p.models.map(m => {
+                const value = `${p.providerID}/${m}`;
+                return `<option value="${value}" ${value === currentModel ? 'selected' : ''}>${p.providerID}: ${m}</option>`;
+              }).join('')
+            ).join('');
         }
         break;
 
