@@ -20,6 +20,8 @@
   let chatSettings = {
     showToolOutput: true
   };
+  let expandedProviders = new Set();
+  let modelsLoaded = false;
 
   const elements = {
     connectionStatus: document.getElementById('connectionStatus'),
@@ -45,6 +47,9 @@
     loadState();
     setupEventListeners();
     loadServerStatus();
+    if (!modelsLoaded && availableModels.length === 0) {
+      loadModels();
+    }
   }
 
   function loadState() {
@@ -55,6 +60,8 @@
       availableModels = state.availableModels || [];
       defaultAgent = state.defaultAgent || defaultAgent;
       chatSettings = state.chatSettings || chatSettings;
+      modelsLoaded = state.modelsLoaded || false;
+      expandedProviders = new Set(state.expandedProviders || []);
     }
 
     updateUI();
@@ -66,7 +73,9 @@
       apiKeys,
       availableModels,
       defaultAgent,
-      chatSettings
+      chatSettings,
+      modelsLoaded,
+      expandedProviders: Array.from(expandedProviders)
     });
   }
 
@@ -97,15 +106,48 @@
       return;
     }
 
-    elements.modelsList.innerHTML = availableModels.map(provider => `
-      <div class="model-item">
-        <div class="model-info">
-          <div class="model-provider">${provider.providerID}</div>
-          <div class="model-name">${provider.models.length} models available</div>
+    elements.modelsList.innerHTML = availableModels.map((provider, index) => {
+      const isExpanded = expandedProviders.has(provider.providerID);
+      const chevronClass = isExpanded ? 'chevron-down' : 'chevron-right';
+      
+      return `
+        <div class="model-item">
+          <div class="model-header" data-provider="${provider.providerID}" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+            <div class="model-info" style="display: flex; align-items: center;">
+              <span class="chevron-icon ${chevronClass}" style="margin-right: 8px;">${isExpanded ? '▼' : '▶'}</span>
+              <div>
+                <div class="model-provider">${provider.providerID}</div>
+                <div class="model-name">${provider.models.length} models available</div>
+              </div>
+            </div>
+            <span class="status-badge status-connected">Available</span>
+          </div>
+          ${isExpanded ? `
+            <div class="model-details">
+              ${provider.models.map(model => `
+                <div class="model-detail-item">
+                  <div class="model-detail-name">${model}</div>
+                  <span class="model-detail-status">Active</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
         </div>
-        <span class="status-badge status-connected">Available</span>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+
+    document.querySelectorAll('.model-header').forEach(header => {
+      header.addEventListener('click', (e) => {
+        const providerID = header.dataset.provider;
+        if (expandedProviders.has(providerID)) {
+          expandedProviders.delete(providerID);
+        } else {
+          expandedProviders.add(providerID);
+        }
+        saveState();
+        renderModels();
+      });
+    });
   }
 
   function setupEventListeners() {
@@ -259,6 +301,7 @@
 
   function handleModelsLoaded(models) {
     availableModels = models;
+    modelsLoaded = true;
     saveState();
     renderModels();
   }

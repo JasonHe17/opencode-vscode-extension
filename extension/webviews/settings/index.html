@@ -117,14 +117,21 @@
     }
 
     .model-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px;
+      padding: 0;
       border: 1px solid var(--vscode-panel-border);
       border-radius: 6px;
       margin-bottom: 8px;
       background-color: var(--vscode-editor-background);
+      overflow: hidden;
+    }
+
+    .model-header {
+      padding: 12px;
+      background-color: var(--vscode-editor-background);
+    }
+
+    .model-header:hover {
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
     }
 
     .model-info {
@@ -222,6 +229,38 @@
 
     ::-webkit-scrollbar-thumb:hover {
       background: var(--vscode-scrollbarSlider-activeBackground);
+    }
+
+    .chevron-icon {
+      font-size: 12px;
+      transition: transform 0.2s ease;
+    }
+
+    .model-details {
+      margin-top: 8px;
+      padding-left: 24px;
+      border-left: 2px solid var(--vscode-panel-border);
+    }
+
+    .model-detail-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+    }
+
+    .model-detail-name {
+      font-size: 13px;
+      color: var(--vscode-foreground);
+    }
+
+    .model-detail-status {
+      font-size: 11px;
+      color: var(--vscode-testing-iconPassed);
+      font-weight: 500;
     }
   </style>
 </head>
