@@ -1,0 +1,275 @@
+{
+  "name": "opencode-gui",
+  "displayName": "OpenCode",
+  "description": "Graphical user interface for OpenCode AI",
+  "version": "0.0.1",
+  "publisher": "opencode-ai",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "coding",
+    "assistant",
+    "copilot"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "opencodeSessions",
+          "title": "OpenCode",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "opencodeSessions": [
+        {
+          "id": "sessionTree",
+          "name": "Sessions",
+          "when": "opencode.enabled"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "opencode.session.create",
+        "title": "Create New Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.chat.open",
+        "title": "Open Chat",
+        "category": "OpenCode",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "opencode.chat.explainSelection",
+        "title": "Explain Selection",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.chat.refactorSelection",
+        "title": "Refactor Selection",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.chat.generateTests",
+        "title": "Generate Tests",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.config.selectModel",
+        "title": "Select AI Model",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.config.setApiKey",
+        "title": "Set API Key",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.open",
+        "title": "Open Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.fork",
+        "title": "Fork Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.delete",
+        "title": "Delete Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.export",
+        "title": "Export Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.share",
+        "title": "Share Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.archive",
+        "title": "Archive Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.session.unarchive",
+        "title": "Unarchive Session",
+        "category": "OpenCode"
+      },
+      {
+        "command": "opencode.sessions.refresh",
+        "title": "Refresh Sessions",
+        "category": "OpenCode",
+        "icon": "$(refresh)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "opencode.chat.open",
+        "key": "cmd+escape",
+        "mac": "cmd+escape",
+        "win": "ctrl+escape",
+        "linux": "ctrl+escape"
+      },
+      {
+        "command": "opencode.session.create",
+        "key": "cmd+shift+escape",
+        "mac": "cmd+shift+escape",
+        "win": "ctrl+shift+escape",
+        "linux": "ctrl+shift+escape"
+      },
+      {
+        "command": "opencode.chat.explainSelection",
+        "when": "editorHasSelection",
+        "key": "cmd+k cmd+e",
+        "mac": "cmd+k cmd+e",
+        "win": "ctrl+k ctrl+e",
+        "linux": "ctrl+k ctrl+e"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "opencode.chat.explainSelection",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "opencode.chat.refactorSelection",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "opencode.chat.generateTests",
+          "when": "editorHasSelection"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "opencode.chat.explainSelection",
+          "when": "editorHasSelection",
+          "group": "opencode@1"
+        },
+        {
+          "command": "opencode.chat.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "opencode@2"
+        },
+        {
+          "command": "opencode.chat.generateTests",
+          "when": "editorHasSelection",
+          "group": "opencode@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "opencode.session.open",
+          "when": "view == opencodeSessions && viewItem == opencode_session",
+          "group": "inline@1"
+        },
+        {
+          "command": "opencode.session.fork",
+          "when": "view == opencodeSessions",
+          "group": "opencode@1"
+        },
+        {
+          "command": "opencode.session.archive",
+          "when": "view == opencodeSessions && viewItem =~ /^opencode_session$/",
+          "group": "opencode@2"
+        },
+        {
+          "command": "opencode.session.unarchive",
+          "when": "view == opencodeSessions && viewItem =~ /^opencode_session.*archived/",
+          "group": "opencode@2"
+        },
+        {
+          "command": "opencode.session.export",
+          "when": "view == opencodeSessions",
+          "group": "opencode@3"
+        },
+        {
+          "command": "opencode.session.share",
+          "when": "view == opencodeSessions",
+          "group": "opencode@3"
+        },
+        {
+          "command": "opencode.session.delete",
+          "when": "view == opencodeSessions",
+          "group": "opencode@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenCode",
+      "properties": {
+        "opencode.server.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "remote",
+            "embedded"
+          ],
+          "default": "auto",
+          "description": "How to connect to the OpenCode server"
+        },
+        "opencode.server.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:4096",
+          "description": "URL of the OpenCode server (for remote mode)"
+        },
+        "opencode.server.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start the local OpenCode server"
+        },
+        "opencode.defaultAgent": {
+          "type": "string",
+          "default": "build",
+          "description": "Default AI agent to use"
+        },
+        "opencode.chat.showToolOutput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show tool execution output in chat"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npx tsc --noEmit 2>&1 | grep -v \"../packages/opencode-sdk\" | grep -v \"^$\" | wc -l | xargs -I {} test {} -eq 0 && npm run lint && node esbuild.mjs",
+    "watch:esbuild": "node esbuild.mjs --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npx tsc --noEmit 2>&1 | grep -v \"../packages/opencode-sdk\" | grep -v \"^$\" | wc -l | xargs -I {} test {} -eq 0 && npm run lint && node esbuild.mjs",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.94.0",
+    "@typescript-eslint/eslint-plugin": "^8.53.0",
+    "@typescript-eslint/parser": "^8.53.0",
+    "esbuild": "^0.25.3",
+    "eslint": "^9.25.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.53.0"
+  },
+  "dependencies": {
+    "@opencode-ai/sdk": "../packages/opencode-sdk"
+  }
+}

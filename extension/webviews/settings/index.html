@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenCode AI Settings</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--vscode-font-family);
+      font-size: var(--vscode-font-size);
+      color: var(--vscode-foreground);
+      background-color: var(--vscode-editor-background);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      width: 100%;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: var(--vscode-foreground);
+    }
+
+    .section {
+      margin-bottom: 24px;
+      padding: 16px;
+      border-radius: 8px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 4px;
+      background-color: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font-family: var(--vscode-font-family);
+      font-size: 14px;
+    }
+
+    input:focus,
+    select:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      background-color: var(--vscode-button-primaryBackground);
+      color: var(--vscode-button-primaryForeground);
+      font-family: var(--vscode-font-family);
+      font-size: 13px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button.secondary {
+      background-color: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+
+    button.danger {
+      background-color: var(--vscode-errorForeground);
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .model-list {
+      margin-top: 12px;
+    }
+
+    .model-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      background-color: var(--vscode-editor-background);
+    }
+
+    .model-info {
+      flex: 1;
+    }
+
+    .model-provider {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .model-name {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+      margin-right: 8px;
+    }
+
+    .status-connected {
+      background-color: var(--vscode-testing-iconPassed);
+      color: white;
+    }
+
+    .status-disconnected {
+      background-color: var(--vscode-errorForeground);
+      color: white;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--vscode-foreground);
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .status-line {
+      padding: 12px;
+      margin-bottom: 16px;
+      border-radius: 6px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-text {
+      font-size: 14px;
+    }
+
+    .server-status {
+      margin-left: auto;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--vscode-scrollbarSlider-background);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--vscode-scrollbarSlider-hoverBackground);
+      border-radius: 6px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--vscode-scrollbarSlider-activeBackground);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>OpenCode Settings</h1>
+
+    <div class="status-line">
+      <div class="status-info">
+        <span class="status-badge status-connected" id="connectionStatus">Connected</span>
+        <span class="status-text" id="serverUrl">http://localhost:4096</span>
+      </div>
+      <button class="secondary" id="refreshButton">
+        <span class="loading-spinner hidden" id="refreshSpinner"></span>
+        Refresh
+      </button>
+    </div>
+
+    <section class="section">
+      <h2>Server Configuration</h2>
+      <div class="form-group">
+        <label for="serverMode">Connection Mode</label>
+        <select id="serverMode">
+          <option value="auto">Auto (start local server)</option>
+          <option value="remote">Remote (connect to existing server)</option>
+          <option value="embedded">Embedded</option>
+        </select>
+      </div>
+      <div class="form-group" id="serverUrlGroup">
+        <label for="serverUrlInput">Server URL</label>
+        <input type="text" id="serverUrlInput" value="http://localhost:4096" placeholder="http://localhost:4096">
+      </div>
+      <button id="saveServerConfig">Save Server Config</button>
+    </section>
+
+    <section class="section">
+      <h2>API Keys</h2>
+      <div class="form-group">
+        <label for="providerSelect">Provider</label>
+        <select id="providerSelect">
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="google">Google</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="apiKey">API Key</label>
+        <input type="password" id="apiKey" placeholder="Enter your API key">
+      </div>
+      <button id="addApiKey">Add API Key</button>
+    </section>
+
+    <section class="section">
+      <h2>AI Models</h2>
+      <h3>Available Models</h3>
+      <div class="model-list" id="modelsList">
+        <p style="color: var(--vscode-descriptionForeground);">Loading models...</p>
+      </div>
+      <button class="secondary" id="loadModelsButton">Refresh Models</button>
+    </section>
+
+    <section class="section">
+      <h2>Default Agent</h2>
+      <div class="form-group">
+        <label for="defaultAgent">Default Agent</label>
+        <select id="defaultAgent">
+          <option value="build">build</option>
+          <option value="test">test</option>
+          <option value="optimize">optimize</option>
+          <option value="explain">explain</option>
+        </select>
+      </div>
+      <button id="saveDefaultAgent">Save Default Agent</button>
+    </section>
+
+    <section class="section">
+      <h2>Chat Settings</h2>
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="showToolOutput" checked>
+          Show tool output in chat
+        </label>
+      </div>
+      <button id="saveChatSettings">Save Chat Settings</button>
+    </section>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
