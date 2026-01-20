@@ -78,6 +78,7 @@ export class SettingsPanel {
   }
 
   private async handleWebviewMessage(message: any): Promise<void> {
+    console.log("[SettingsPanel] Received message from webview:", message.type, message)
     switch (message.type) {
       case "checkServerStatus":
         await this.checkServerStatus()
@@ -92,6 +93,7 @@ export class SettingsPanel {
         break
 
       case "loadModels":
+        console.log("[SettingsPanel] loadModels request received")
         await this.loadModels()
         break
 
@@ -163,12 +165,15 @@ export class SettingsPanel {
 
   private async loadModels(): Promise<void> {
     try {
+      console.log("[SettingsPanel] Calling client.getModels()...")
       const models = await this.client.getModels()
+      console.log("[SettingsPanel] Got models:", models)
       this.postMessageToWebview({
         type: "modelsLoaded",
         models
       })
     } catch (error) {
+      console.error("[SettingsPanel] Error loading models:", error)
       this.postMessageToWebview({
         type: "error",
         error: `Failed to load models: ${error}`

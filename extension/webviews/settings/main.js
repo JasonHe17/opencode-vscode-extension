@@ -1,5 +1,7 @@
 (function() {
+  console.log('[Settings Webview] Initializing...');
   const vscode = acquireVsCodeApi();
+  console.log('[Settings Webview] vscode API acquired');
 
   let serverConfig = {
     mode: 'auto',
@@ -85,6 +87,7 @@
   }
 
   function renderModels() {
+    console.log('[Settings Webview] renderModels() called, availableModels:', availableModels);
     if (availableModels.length === 0) {
       elements.modelsList.innerHTML = `
         <p style="color: var(--vscode-descriptionForeground);">
@@ -106,6 +109,8 @@
   }
 
   function setupEventListeners() {
+    console.log('[Settings Webview] Setting up event listeners...');
+    
     elements.serverMode.addEventListener('change', (e) => {
       serverConfig.mode = e.target.value;
       
@@ -155,6 +160,9 @@
     });
 
     elements.loadModelsButton.addEventListener('click', () => {
+      console.log('[Settings Webview] Refresh Models button clicked');
+      console.log('[Settings Webview] vscode object:', !!vscode);
+      console.log('[Settings Webview] vscode.postMessage:', typeof vscode?.postMessage);
       loadModels();
     });
 
@@ -201,19 +209,24 @@
   }
 
   function loadModels() {
+    console.log('[Settings Webview] loadModels() called');
     vscode.postMessage({
       type: 'loadModels'
     });
   }
 
   function handleVsCodeMessage(message) {
-    switch (message.type) {
+    console.log('[Settings Webview] Received message:', message);
+    const data = message.data || message;
+    console.log('[Settings Webview] Parsed data:', { type: data.type, payload: data });
+    switch (data.type) {
       case 'serverStatus':
-        handleServerStatus(message.status);
+        handleServerStatus(data.status);
         break;
 
       case 'modelsLoaded':
-        handleModelsLoaded(message.models);
+        console.log('[Settings Webview] modelsLoaded event:', data.models);
+        handleModelsLoaded(data.models);
         break;
 
       case 'configSaved':
@@ -221,8 +234,12 @@
         break;
 
       case 'error':
-        handleError(message.error);
+        console.log('[Settings Webview] error event:', data.error);
+        handleError(data.error);
         break;
+      
+      default:
+        console.warn('[Settings Webview] Unknown message type:', data.type);
     }
   }
 
@@ -250,4 +267,8 @@
     console.error('[Settings] Error:', error);
     alert(error);
   }
+
+  console.log('[Settings Webview] Setting up event listeners...');
+  init();
+  console.log('[Settings Webview] Initialization complete');
 })();

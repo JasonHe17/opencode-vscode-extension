@@ -380,10 +380,27 @@ export class OpenCodeClient {
   async getModels(): Promise<Array<{ providerID: string; models: string[] }>> {
     console.log("[OpenCodeClient] Getting models")
     try {
-      const status = await this.getServerStatus()
-      console.log("[OpenCodeClient] Models:", status.models)
-      return status.models
+      console.log("[OpenCodeClient] SDK config accessor:", typeof this.sdk.config)
+      const response = await this.sdk.config.providers({ directory: this.directory })
+      console.log("[OpenCodeClient] Providers response:", JSON.stringify(response, null, 2))
+
+      const data = (response as any).data || (response as any).body || response
+      console.log("[OpenCodeClient] Parsed data:", data)
+
+      const providers: any[] = data?.providers || []
+      console.log("[OpenCodeClient] Providers count:", providers.length)
+
+      const models = providers
+        .filter((p: any) => p.models && Object.keys(p.models).length > 0)
+        .map((p: any) => ({
+          providerID: p.id || p.name,
+          models: Object.keys(p.models)
+        }))
+
+      console.log("[OpenCodeClient] Loaded models:", models)
+      return models
     } catch (error) {
+      console.error("[OpenCodeClient] Failed to load models:", error)
       const errorMessage = error instanceof Error ? error.message : String(error)
       vscode.window.showErrorMessage(
         `Failed to load models from OpenCode server: ${errorMessage}. ` +
