@@ -29,6 +29,8 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
 - Tool execution status visualization
 - Agent selector dropdown
 - File attachment support
+- Collapsible reasoning display with auto-collapse on completion
+- Session history restoration when switching sessions
 
 ### AI Configuration
 - Agent selection and management

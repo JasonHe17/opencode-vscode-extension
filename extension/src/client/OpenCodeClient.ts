@@ -410,6 +410,22 @@ export class OpenCodeClient {
     }
   }
 
+  async getSessionMessages(id: string): Promise<any[]> {
+    try {
+      console.log("[OpenCodeClient] Getting messages for session:", id)
+      const response = await this.sdk.session.messages({ sessionID: id })
+      
+      // Handle different response formats based on sdk.gen.ts (SessionMessagesResponses)
+      const messages = response.data || response.body || response || []
+      console.log(`[OpenCodeClient] Got ${Array.isArray(messages) ? messages.length : 0} messages`)
+      
+      return Array.isArray(messages) ? messages : []
+    } catch (error) {
+      console.error("[OpenCodeClient] Failed to get session messages:", error)
+      throw error
+    }
+  }
+
   private normalizeSessionInfo(session: any): SessionInfo {
     return {
       id: session.id,

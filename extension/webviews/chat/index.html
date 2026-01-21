@@ -165,7 +165,53 @@
       padding: 0;
     }
 
+    /* Reasoning Box Styles */
+    .reasoning-container {
+      margin: 12px 0;
+      padding: 10px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 6px;
+      background-color: var(--vscode-editor-background);
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .reasoning-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+      user-select: none;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .reasoning-header:hover {
+      opacity: 1;
+    }
+
+    .collapse-icon {
+      font-size: 12px;
+      transition: transform 0.2s ease;
+    }
+
+    .reasoning-container[data-collapsed="true"] .reasoning-content {
+      display: none;
+    }
+
+    .reasoning-content {
+      color: var(--vscode-descriptionForeground);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      line-height: 1.5;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+
     /* Tool execution */
+
     .tool-execution {
       margin-top: 12px;
       padding: 12px;

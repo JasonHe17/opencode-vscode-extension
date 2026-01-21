@@ -265,6 +265,11 @@ export class ChatPanel {
       };
       console.log("[ChatPanel] Posting to webview:", JSON.stringify(response));
       this.postMessageToWebview(response)
+
+      // If we have a current session, send its history after status
+      if (this.currentSessionId) {
+        await this.switchSession(this.currentSessionId)
+      }
     } catch (error) {
       console.error("[ChatPanel] Failed to handle init:", error)
       // Fallback with minimal info if server is starting
@@ -368,18 +373,33 @@ export class ChatPanel {
     })
   }
 
-  switchSession(sessionId: string): void {
+  async switchSession(sessionId: string): Promise<void> {
     this.currentSessionId = sessionId
     const session = this.sessionManager.getSession(sessionId)
 
     if (session) {
-      this.postMessageToWebview({
-        type: "init",
-        sessionId: sessionId,
-        sessionTitle: session.title,
-        agent: session.agent || this.currentAgent,
-        messages: []
-      })
+      try {
+        console.log(`[ChatPanel] Switching to session ${sessionId}, fetching history...`)
+        const messagesResponse = await this.client.getSessionMessages(sessionId)
+        console.log(`[ChatPanel] Fetched ${messagesResponse.length} messages for history`)
+        
+        this.postMessageToWebview({
+          type: "init",
+          sessionId: sessionId,
+          sessionTitle: session.title,
+          agent: session.agent || this.currentAgent,
+          messages: messagesResponse
+        })
+      } catch (error) {
+        console.error("[ChatPanel] Failed to fetch session history:", error)
+        this.postMessageToWebview({
+          type: "init",
+          sessionId: sessionId,
+          sessionTitle: session.title,
+          agent: session.agent || this.currentAgent,
+          messages: []
+        })
+      }
     }
   }
 

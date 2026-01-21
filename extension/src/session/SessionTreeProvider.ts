@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { SessionManager } from "./SessionManager.js"
 import { SessionTreeItem } from "./SessionTreeItem.js"
+import { ChatPanel } from "../chat/ChatPanel.js"
 
 export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<SessionTreeItem | void>()
@@ -49,7 +50,8 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
     }
 
     await this.sessionManager.setActiveSession(sessionId)
-    vscode.commands.executeCommand("opencode.chat.open", sessionId)
+    const chatPanel = ChatPanel.getInstance()
+    chatPanel.show(sessionId)
   }
 
   async forkSession(sessionId: string): Promise<void> {

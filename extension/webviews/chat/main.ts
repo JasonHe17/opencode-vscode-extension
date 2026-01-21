@@ -66,16 +66,132 @@ function renderTextPart(text: string): HTMLElement {
 }
 
 function renderReasoningPart(content: any, container: HTMLElement): void {
+  const reasoningDiv = document.createElement("div")
+  reasoningDiv.className = "reasoning-container"
+  reasoningDiv.setAttribute("data-collapsed", "true")
+  
+  const label = document.createElement("div")
+  label.className = "reasoning-label"
+  label.innerHTML = `<span class="reasoning-icon">🧠</span> Thinking... <span class="collapse-icon">▼</span>`
+  reasoningDiv.appendChild(label)
+
+  const textDiv = document.createElement("div")
+  textDiv.className = "reasoning-content"
+  
   if (content && typeof content === "object" && content.html) {
-    container.innerHTML += content.html
+    textDiv.innerHTML = content.html
   } else if (typeof content === "string") {
-    const div = document.createElement("div")
-    div.style.padding = "8px"
-    div.style.background = "var(--vscode-editor-background)"
-    div.style.borderLeft = "3px solid var(--vscode-focusBorder)"
-    div.textContent = content
-    container.appendChild(div)
+    textDiv.textContent = content
   }
+  
+  reasoningDiv.appendChild(textDiv)
+  
+  label.addEventListener("click", (e) => {
+    const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
+    if (isCollapsed) {
+      reasoningDiv.setAttribute("data-collapsed", "false")
+    } else {
+      reasoningDiv.setAttribute("data-collapsed", "true")
+    }
+    updateCollapseIcon(reasoningDiv)
+    e.stopPropagation()
+  })
+
+  container.appendChild(reasoningDiv)
+}
+
+function updateCollapseIcon(reasoningDiv: HTMLElement): void {
+  const icon = reasoningDiv.querySelector(".collapse-icon") as HTMLElement
+  if (icon) {
+    const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
+    icon.textContent = isCollapsed ? "▼" : "▲"
+  }
+}
+
+function updateMessagePart(messageId: string, partId: string, part: any): void {
+  const message = messages.find((m) => m.id === messageId)
+  if (!message) return
+
+  const messageEl = messagesContainer.querySelector(`[data-message-id="${messageId}"]`)
+  if (!messageEl) return
+  const contentDiv = messageEl.querySelector(".message-content")
+  if (!contentDiv) return
+
+  let existingPart = message.parts.find((p: any) => p.id === partId || (p.content && p.content.id === partId))
+
+  if (existingPart) {
+    Object.assign(existingPart, part)
+    if (part.type === "reasoning") {
+      const reasoningEl = contentDiv.querySelector(`.reasoning-container[data-part-id="${partId}"]`) as HTMLElement
+      if (reasoningEl) {
+        const textDiv = reasoningEl.querySelector(".reasoning-content")
+        if (textDiv) {
+          if (part.content && typeof part.content === "object" && part.content.html) {
+            textDiv.innerHTML = part.content.html
+          } else if (typeof part.content === "string") {
+            textDiv.textContent = part.content
+          }
+          reasoningEl.scrollTop = reasoningEl.scrollHeight
+        }
+      }
+    } else if (part.type === "text") {
+      const textEl = contentDiv.querySelector(`.message-text[data-part-id="${partId}"]`)
+      if (textEl) {
+        textEl.textContent = part.content
+      }
+    }
+  } else {
+    message.parts.push(part)
+    if (part.type === "reasoning") {
+      const reasoningDiv = document.createElement("div")
+      reasoningDiv.className = "reasoning-container"
+      reasoningDiv.setAttribute("data-part-id", partId)
+      
+      const label = document.createElement("div")
+      label.className = "reasoning-label"
+      label.innerHTML = `<span class="reasoning-icon">🧠</span> Thinking... <span class="collapse-icon">▼</span>`
+      reasoningDiv.appendChild(label)
+
+      const textDiv = document.createElement("div")
+      textDiv.className = "reasoning-content"
+      if (part.content && typeof part.content === "object" && part.content.html) {
+        textDiv.innerHTML = part.content.html
+      } else {
+        textDiv.textContent = part.content
+      }
+      reasoningDiv.appendChild(textDiv)
+      
+      label.addEventListener("click", (e) => {
+        const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
+        if (isCollapsed) {
+          reasoningDiv.setAttribute("data-collapsed", "false")
+        } else {
+          reasoningDiv.setAttribute("data-collapsed", "true")
+        }
+        updateCollapseIcon(reasoningDiv)
+        e.stopPropagation()
+      })
+      
+      contentDiv.appendChild(reasoningDiv)
+    } else if (part.type === "tool" && part.content) {
+      contentDiv.querySelectorAll(".reasoning-container").forEach(r => r.setAttribute("data-collapsed", "true"))
+      contentDiv.querySelectorAll(".reasoning-container").forEach(r => updateCollapseIcon(r as HTMLElement))
+      
+      const toolDiv = document.createElement("div")
+      toolDiv.innerHTML = constructToolHtml(part.content)
+      contentDiv.appendChild(toolDiv)
+    } else if (part.type === "text") {
+      contentDiv.querySelectorAll(".reasoning-container").forEach(r => r.setAttribute("data-collapsed", "true"))
+      contentDiv.querySelectorAll(".reasoning-container").forEach(r => updateCollapseIcon(r as HTMLElement))
+
+      const textDiv = renderTextPart(part.content)
+      textDiv.setAttribute("data-part-id", partId)
+      textDiv.className = "message-text"
+      contentDiv.appendChild(textDiv)
+    }
+  }
+  
+  messagesContainer.scrollTop = messagesContainer.scrollHeight
 }
 
 function renderToolExecution(content: any): HTMLElement {
@@ -208,6 +324,10 @@ window.addEventListener("message", (event) => {
 
     case "sessionIdle":
       console.log("Session idle:", message.sessionId)
+      messagesContainer.querySelectorAll(".reasoning-container").forEach(r => {
+        r.setAttribute("data-collapsed", "true")
+        updateCollapseIcon(r as HTMLElement)
+      })
       break
 
     case "fileSuggestions":
@@ -276,34 +396,6 @@ setTimeout(() => {
   console.log("Sending init request...");
   vscode.postMessage({ type: "init" });
 }, 100);
-
-function updateMessagePart(messageId: string, partId: string, part: any): void {
-  const message = messages.find((m) => m.id === messageId)
-  if (!message) return
-
-  const existingPart = message.parts.find((p: any) => p.id === partId || (p.content && p.content.id === partId))
-  if (existingPart) {
-    Object.assign(existingPart, part)
-  } else {
-    message.parts.push(part)
-  }
-
-  const messageEl = messagesContainer.querySelector(`[data-message-id="${messageId}"]`)
-  if (messageEl) {
-    const contentDiv = messageEl.querySelector(".message-content")
-    if (contentDiv) {
-      if (part.type === "tool" && part.content) {
-        const toolDiv = document.createElement("div")
-        toolDiv.innerHTML = constructToolHtml(part.content)
-        contentDiv.appendChild(toolDiv)
-      } else if (part.type === "text") {
-        const textDiv = renderTextPart(part.content)
-        contentDiv.appendChild(textDiv)
-      }
-    }
-    messagesContainer.scrollTop = messagesContainer.scrollHeight
-  }
-}
 
 function showFileSuggestions(suggestions: any[]): void {
   fileSuggestions.innerHTML = ""

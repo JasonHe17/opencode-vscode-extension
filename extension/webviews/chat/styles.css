@@ -76,27 +76,52 @@ body {
   color: var(--vscode-descriptionForeground);
   font-size: 13px;
   background: var(--vscode-editor-inactiveSelectionBackground);
+  display: flex;
+  flex-direction: column;
+}
+
+.reasoning-container[data-collapsed="true"] .reasoning-content {
+  display: none;
+}
+
+.reasoning-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-style: normal;
+  opacity: 0.8;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.reasoning-header:hover {
+  opacity: 1;
+}
+
+.collapse-icon {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.reasoning-content {
+  color: var(--vscode-descriptionForeground);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
   max-height: 150px;
   overflow-y: auto;
-  position: relative;
-  transition: max-height 0.3s ease;
 }
 
 .reasoning-container[data-collapsed="true"] {
   max-height: 40px;
   overflow: hidden;
-  cursor: pointer;
 }
 
-.reasoning-container[data-collapsed="true"]::after {
-  content: "Click to expand thinking...";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 4px 12px;
-  background: linear-gradient(transparent, var(--vscode-editor-inactiveSelectionBackground));
-  font-size: 11px;
+.reasoning-container[data-collapsed="true"] .reasoning-content {
+  display: none;
 }
 
 .tool-bash-container {
@@ -157,11 +182,24 @@ body {
 }
 
 .reasoning-label {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-weight: bold;
   margin-bottom: 4px;
   font-style: normal;
   opacity: 0.8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.reasoning-label:hover {
+  opacity: 1;
+}
+
+.collapse-icon {
+  font-size: 12px;
+  transition: transform 0.2s ease;
 }
 
 .tool-execution {

@@ -277,25 +277,33 @@
         partEl = document.createElement('div');
         partEl.className = 'reasoning-container';
         if (part.id) partEl.dataset.partId = part.id;
-        partEl.onclick = () => {
-          if (partEl.dataset.collapsed === 'true') {
-            partEl.dataset.collapsed = 'false';
-          } else if (partEl.dataset.completed === 'true') {
-            partEl.dataset.collapsed = 'true';
-          }
-        };
+        partEl.dataset.collapsed = 'true';
         container.appendChild(partEl);
       }
       
       const isCompleted = part.state?.status === 'completed';
       if (isCompleted && !partEl.dataset.completed) {
         partEl.dataset.completed = 'true';
-        partEl.dataset.collapsed = 'true';
       }
       
-      partEl.innerHTML = `<span class="reasoning-label">Thinking...</span>${formatMessage(part.text || '')}`;
+      const collapsed = partEl.dataset.collapsed === 'true';
+      partEl.innerHTML = `<span class="reasoning-header"><span>Thinking...</span><span class="collapse-icon">${collapsed ? '▼' : '▲'}</span></span><div class="reasoning-content">${formatMessage(part.text || '')}</div>`;
       
-      if (!isCompleted || partEl.dataset.collapsed !== 'true') {
+      const header = partEl.querySelector('.reasoning-header');
+      if (header) {
+        header.onclick = (e) => {
+          const isCollapsed = partEl.dataset.collapsed === 'true';
+          if (isCollapsed) {
+            partEl.dataset.collapsed = 'false';
+          } else {
+            partEl.dataset.collapsed = 'true';
+          }
+          updateCollapseIcon(partEl);
+          e.stopPropagation();
+        };
+      }
+      
+      if (!isCompleted && partEl.dataset.collapsed !== 'true') {
         partEl.scrollTop = partEl.scrollHeight;
       }
     } else if (part.type === 'tool') {
@@ -304,6 +312,14 @@
       const divider = document.createElement('div');
       divider.className = 'compaction-divider';
       container.appendChild(divider);
+    }
+  }
+
+  function updateCollapseIcon(reasoningDiv) {
+    const icon = reasoningDiv.querySelector('.collapse-icon');
+    if (icon) {
+      const isCollapsed = reasoningDiv.dataset.collapsed === 'true';
+      icon.textContent = isCollapsed ? '▼' : '▲';
     }
   }
 
@@ -515,9 +531,16 @@
         }
         saveState();
         if (message.messages && message.messages.length > 0) {
+          messagesContainer.innerHTML = '';
           message.messages.forEach(msg => {
-            addMessage(msg.role, msg.content, msg.attachments);
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            const content = msg.parts ? '' : (msg.content || '');
+            const parts = msg.parts || [];
+            const msgEl = addMessage(role, content, parts);
+            if (msg.id) msgEl.id = 'msg-' + msg.id;
           });
+        } else if (message.messages) {
+          messagesContainer.innerHTML = '';
         }
         break;
 
@@ -599,6 +622,13 @@
               }).join('')
             ).join('');
         }
+        break;
+
+      case 'sessionIdle':
+        messagesContainer.querySelectorAll('.reasoning-container').forEach(r => {
+          r.dataset.collapsed = 'true';
+          updateCollapseIcon(r);
+        });
         break;
 
       case 'error':
