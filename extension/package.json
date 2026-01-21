@@ -35,8 +35,7 @@
       "opencodeSessions": [
         {
           "id": "sessionTree",
-          "name": "Sessions",
-          "when": "opencode.enabled"
+          "name": "Sessions"
         },
         {
           "id": "opencodeChat",
@@ -48,8 +47,9 @@
     "commands": [
       {
         "command": "opencode.session.create",
-        "title": "Create New Session",
-        "category": "OpenCode"
+        "title": "新建任务",
+        "category": "OpenCode",
+        "icon": "$(plus)"
       },
       {
         "command": "opencode.chat.open",
@@ -95,7 +95,8 @@
       {
         "command": "opencode.session.delete",
         "title": "Delete Session",
-        "category": "OpenCode"
+        "category": "OpenCode",
+        "icon": "$(trash)"
       },
       {
         "command": "opencode.session.export",
@@ -149,6 +150,18 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "opencode.session.create",
+          "when": "view == sessionTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "opencode.sessions.refresh",
+          "when": "view == sessionTree",
+          "group": "navigation@2"
+        }
+      ],
       "commandPalette": [
         {
           "command": "opencode.chat.explainSelection",
@@ -185,6 +198,11 @@
           "command": "opencode.session.open",
           "when": "view == opencodeSessions && viewItem == opencode_session",
           "group": "inline@1"
+        },
+        {
+          "command": "opencode.session.delete",
+          "when": "view == sessionTree && viewItem =~ /^opencode_session/",
+          "group": "inline"
         },
         {
           "command": "opencode.session.fork",

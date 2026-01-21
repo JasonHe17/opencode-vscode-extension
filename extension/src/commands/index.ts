@@ -26,8 +26,11 @@ function registerSessionCommands(context: vscode.ExtensionContext): void {
 
   const deleteSessionCommand = vscode.commands.registerCommand(
     "opencode.session.delete",
-    async (sessionId: string) => {
-      await deleteSession(sessionId)
+    async (item: any) => {
+      const sessionId = typeof item === "string" ? item : item?.item?.id
+      if (sessionId) {
+        await deleteSession(sessionId)
+      }
     }
   )
 
@@ -39,9 +42,20 @@ function registerSessionCommands(context: vscode.ExtensionContext): void {
   )
 
   const showSessionCommand = vscode.commands.registerCommand(
-    "opencode.session.show",
+    "opencode.session.open",
     async (sessionId: string) => {
       await showSession(sessionId)
+    }
+  )
+
+  const refreshSessionsCommand = vscode.commands.registerCommand(
+    "opencode.sessions.refresh",
+    async () => {
+      const { SessionManager } = await import("../session/SessionManager.js")
+      const manager = SessionManager.getInstance()
+      await manager.loadSessions()
+      // Force refresh of the tree view
+      await vscode.commands.executeCommand("workbench.actions.treeView.sessionTree.refresh")
     }
   )
 
@@ -50,7 +64,8 @@ function registerSessionCommands(context: vscode.ExtensionContext): void {
     setActiveSessionCommand,
     deleteSessionCommand,
     forkSessionCommand,
-    showSessionCommand
+    showSessionCommand,
+    refreshSessionsCommand
   )
 }
 

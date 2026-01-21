@@ -75,6 +75,7 @@ export class SessionManager {
   async loadSessions(): Promise<void> {
     try {
       const sessionList = await this.client.listSessions()
+      this.sessions.clear()
 
       for (const session of sessionList) {
         const sessionWithStatus = this.toSessionWithStatus(session)

@@ -53,6 +53,9 @@ export class SessionTreeItem extends vscode.TreeItem {
     if (this.item.status === "active") {
       parts.push("active")
     }
+    if (this.item.status === "archived") {
+      parts.push("archived")
+    }
 
     return parts.join("_")
   }
