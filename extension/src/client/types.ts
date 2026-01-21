@@ -11,11 +11,23 @@ export interface SessionInfo {
 }
 
 export interface MessagePart {
-  type: "text" | "tool" | "reasoning" | "file"
+  id: string
+  type: "text" | "tool" | "reasoning" | "file" | "compaction"
   content?: unknown
   text?: string
-  state?: "pending" | "running" | "completed" | "error"
-  output?: string
+  synthetic?: boolean
+  ignored?: boolean
+  state?: {
+    status: "pending" | "running" | "completed" | "error"
+    input?: any
+    output?: any
+    metadata?: any
+    error?: string
+  }
+  tool?: string
+  callID?: string
+  filename?: string
+  mime?: string
 }
 
 export interface BusEvent {

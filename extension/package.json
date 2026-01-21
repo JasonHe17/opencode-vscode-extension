@@ -40,7 +40,8 @@
         {
           "id": "opencodeChat",
           "name": "Chat",
-          "type": "webview"
+          "type": "webview",
+          "visibility": "visible"
         }
       ]
     },

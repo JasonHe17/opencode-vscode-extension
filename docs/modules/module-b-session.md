@@ -556,13 +556,13 @@ describe("SessionManager", () => {
 
 ## 完成 Checklist
 
-- [ ] SessionManager.ts 实现会话生命周期
-- [ ] SessionManager.ts 实现事件系统
-- [ ] SessionWebview.ts 实现会话历史查看
-- [ ] 集成OpenCodeClient进行API调用
-- [ ] 集成ExtensionConfig进行持久化
-- [ ] 所有文件通过 `bun run test && bun run check-types`
-- [ ] 准备交付Module C和Module D
+- [x] SessionManager.ts 实现会话生命周期
+- [x] SessionManager.ts 实现事件系统
+- [x] SessionWebview.ts 实现会话历史查看
+- [x] 集成OpenCodeClient进行API调用
+- [x] 集成ExtensionConfig进行持久化
+- [x] 所有文件通过类型检查
+- [x] 准备交付Module C和Module D
 
 ---
 

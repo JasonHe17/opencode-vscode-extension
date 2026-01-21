@@ -4,9 +4,9 @@ A graphical user interface for OpenCode AI, providing a rich VSCode extension ex
 
 ## Version
 
-Current version: **0.0.1** (Initial Release)
+Current version: **0.0.2**
 
-This is the first release of the opencode-gui extension. It provides basic functionality with core infrastructure in place. Some features from the TUI version may not yet be available.
+See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
 
 ## Features
 
@@ -18,9 +18,10 @@ This is the first release of the opencode-gui extension. It provides basic funct
 
 ### Session Management
 - Create, open, fork, delete, and export sessions
-- Active session tracking
-- Session sidebar tree view
+- Active session tracking with visual indicators
+- Session sidebar tree view with inline actions
 - Session archiving support
+- Refresh session list on demand
 
 ### Chat Interface
 - Main chat panel with streaming responses
@@ -79,7 +80,12 @@ bun run package
 ### Commands
 
 - `opencode.chat.open` - Open chat panel
-- `opencode.session.create` - Create new session
+- `opencode.session.create` - Create new session (新建任务)
+- `opencode.session.open` - Open existing session
+- `opencode.session.delete` - Delete session
+- `opencode.session.fork` - Fork session from current or historical state
+- `opencode.session.export` - Export session to file
+- `opencode.sessions.refresh` - Refresh session list
 - `opencode.chat.explainSelection` - Explain selected code
 - `opencode.chat.refactorSelection` - Refactor selected code
 - `opencode.chat.generateTests` - Generate tests for selection
@@ -113,7 +119,7 @@ See [AGENTS.md](./AGENTS.md) for detailed development guidelines.
 
 ## Known Limitations
 
-This is v0.0.1 with basic functionality. Some features from the TUI version may not yet be available:
+This is v0.0.2 with active development. Some features from the TUI version may not yet be available:
 
 - Testing infrastructure is incomplete
 - No end-user documentation

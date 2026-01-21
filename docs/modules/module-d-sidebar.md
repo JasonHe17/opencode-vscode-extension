@@ -385,13 +385,13 @@ bun run lint
 
 ## 完成 Checklist
 
-- [ ] SessionTreeItem.ts 实现树节点定义
-- [ ] SessionTreeProvider.ts 实现树数据源
-- [ ] SessionTreeProvider.ts 实现会话操作（打开/分支/删除）
-- [ ] 集成SessionManager获取会话列表
-- [ ] package.json 添加viewsContributes
-- [ ] 所有文件通过 `bun run test && bun run check-types`
-- [ ] 准备交付Module H
+- [x] SessionTreeItem.ts 实现树节点定义
+- [x] SessionTreeProvider.ts 实现树数据源
+- [x] SessionTreeProvider.ts 实现会话操作（打开/分支/删除）
+- [x] 集成SessionManager获取会话列表
+- [x] package.json 添加viewsContributes
+- [x] 所有文件通过类型检查
+- [x] 准备交付Module H
 
 ---
 

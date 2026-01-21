@@ -37,38 +37,211 @@ body {
 .message {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  width: 100%;
 }
 
-.message.user {
-  align-items: flex-end;
-}
-
-.message.assistant {
-  align-items: flex-start;
+.message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
 }
 
 .message-content {
-  max-width: 80%;
-  padding: 12px 16px;
-  border-radius: 8px;
+  width: 100%;
+  padding: 0 0 0 12px;
   line-height: 1.5;
 }
 
-.message.user .message-content {
-  background: var(--vscode-button-background);
-  color: white;
+.message.user {
+  border-left: 3px solid var(--vscode-button-background);
 }
 
-.message.assistant .message-content {
+.message.assistant {
+  border-left: 3px solid var(--vscode-symbolIcon-methodForeground);
+}
+
+.message-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.reasoning-container {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--vscode-descriptionForeground);
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  max-height: 150px;
+  overflow-y: auto;
+  position: relative;
+  transition: max-height 0.3s ease;
+}
+
+.reasoning-container[data-collapsed="true"] {
+  max-height: 40px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.reasoning-container[data-collapsed="true"]::after {
+  content: "Click to expand thinking...";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 12px;
+  background: linear-gradient(transparent, var(--vscode-editor-inactiveSelectionBackground));
+  font-size: 11px;
+}
+
+.tool-bash-container {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.tool-bash-input {
+  padding: 8px 12px;
+  background: var(--vscode-editor-background);
+  border-bottom: 1px solid var(--vscode-widget-border);
+  max-height: 80px;
+  overflow-y: auto;
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+.tool-bash-output {
+  padding: 8px 12px;
+  background: var(--vscode-terminal-background, #000);
+  color: var(--vscode-terminal-foreground, #ccc);
+  max-height: 150px;
+  overflow-y: auto;
+  font-family: var(--vscode-editor-font-family, monospace);
+  white-space: pre-wrap;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.message-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 4px 0;
+}
+
+.message-text code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.message-text pre {
+  margin: 8px 0;
+  padding: 12px;
   background: var(--vscode-editor-background);
   border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+  overflow-x: auto;
 }
 
-.message-role {
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+.message-text pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.reasoning-label {
+  display: block;
+  font-weight: bold;
   margin-bottom: 4px;
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.tool-execution {
+  margin: 4px 0 4px 12px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 13px;
+}
+
+.tool-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-foreground);
+}
+
+.tool-inline.completed {
+  color: var(--vscode-descriptionForeground);
+}
+
+.tool-inline.error {
+  color: var(--vscode-errorForeground);
+}
+
+.tool-block {
+  margin-top: 8px;
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 4px;
+}
+
+.todo-list {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-status {
+  font-size: 14px;
+}
+
+.diff-summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.diff-summary:hover {
+  background: var(--vscode-editor-selectionBackground);
+}
+
+.compaction-divider {
+  border-top: 1px dashed var(--vscode-widget-border);
+  margin: 16px 0;
+  text-align: center;
+  position: relative;
+}
+
+.compaction-divider::after {
+  content: " Compaction ";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--vscode-background);
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
 }
 
 .input-area {

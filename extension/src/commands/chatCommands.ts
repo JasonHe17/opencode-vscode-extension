@@ -11,7 +11,12 @@ export async function openChat(sessionId?: string): Promise<void> {
     sessionId = activeSession?.id
   }
 
-  chatPanel.show(sessionId)
+  // Ensure the view is visible in the sidebar
+  await vscode.commands.executeCommand("opencodeChat.focus")
+  
+  if (sessionId) {
+    chatPanel.switchSession(sessionId)
+  }
 }
 
 export async function sendMessage(sessionId: string, message: string): Promise<void> {

@@ -50,7 +50,7 @@ export class ChatPanel {
 
   private setupEventListeners(): void {
     console.log("[ChatPanel] Setting up event listeners...")
-    this.eventListenerRemover = this.client.addEventListener((event: BusEvent) => {
+    this.eventListenerRemover = this.client.addEventListener((event: any) => {
       this.handleServerEvent(event)
     })
   }
@@ -101,109 +101,31 @@ export class ChatPanel {
     const sender = data.sender || part.sender
     const role = sender === "user" ? "user" : "assistant"
     
-    console.log(`[ChatPanel] Message part updated: type=${part.type}, role=${role}, state=${part.state}, messageID=${messageId}`)
-    console.log(`[ChatPanel] Sender: ${sender}, Raw part:`, JSON.stringify({
-      sender: part.sender,
-      dataSender: data.sender,
-      calculatedRole: role
-    }))
-    
-    // Skip user messages (we already display them locally)
-    if (role === "user") {
-      console.log(`[ChatPanel] Skipping user message`)
-      return
-    }
+    if (role === "user") return
 
-    // Check if this is a new message
-    if (messageId && messageId !== this.currentMessageId) {
-      console.log(`[ChatPanel] New message detected: ${messageId} (previous: ${this.currentMessageId})`)
-      
-      // Finalize previous message if any
-      if (this.pendingMessageContent && this.pendingMessageContent.length > 0) {
-        console.log(`[ChatPanel] Sending pending message content: ${this.pendingMessageContent.length} chars`)
-        this.postMessageToWebview({
-          type: "message",
-          role: "assistant",
-          content: this.pendingMessageContent,
-          messages: [],
-          attachments: []
-        })
-      }
-      
-      this.currentMessageId = messageId
-      this.pendingMessageContent = ""
-    }
+    // Post individual part update for streaming
+    this.postMessageToWebview({
+      type: "messagePart",
+      messageId: messageId,
+      role: role,
+      part: part
+    })
 
-    if (part.type === "text") {
-      const content = part.text || part.content || ""
-      console.log(`[ChatPanel] Text content: "${content.substring(0, 50)}..." (len=${content.length})`)
-      
-      if (content) {
-        // Replace pending content with the full text (not append!)
-        this.pendingMessageContent = content
-        console.log(`[ChatPanel] Pending content length: ${this.pendingMessageContent.length}`)
-        
-        // Skip if this is duplicate of last user message (server sometimes echoes user input)
-        if (content === this.lastUserMessage) {
-          console.log(`[ChatPanel] Skipping duplicate of last user message`)
-          this.pendingMessageContent = ""
-        }
-      }
-    } else if (part.type === "step-finish" || part.type === "step-start") {
-      // When step finishes, send the accumulated text
-      if (this.pendingMessageContent && this.pendingMessageContent.length > 0) {
-        console.log(`[ChatPanel] Step finished, sending content: ${this.pendingMessageContent.length} chars`)
-        this.postMessageToWebview({
-          type: "message",
-          role: "assistant",
-          content: this.pendingMessageContent,
-          messages: [],
-          attachments: []
-        })
-        this.currentMessageId = null
-        this.pendingMessageContent = ""
-        this.isWaiting = false
-      }
-    } else if (part.type === "tool") {
-      const toolData = {
-        type: "toolUpdate" as const,
-        toolId: part.id,
-        updates: {
-          state: part.state,
-          output: part.output,
-          command: part.command,
-          name: part.name
-        }
-      }
-      this.postMessageToWebview(toolData)
+    if (part.type === "step-finish" || part.type === "step-start") {
+      this.isWaiting = false
     }
   }
 
   private handleMessageCreated(data: any): void {
     const message = data.message || data
-    if (!message || !message.parts) return
+    if (!message) return
     
-    const sender = message.sender || data.sender
-    
-    // Skip user messages
-    if (sender === "user") return
-    
-    console.log("[ChatPanel] Message created:", sender)
-    
-    // Find text parts
-    const textParts = message.parts.filter((p: any) => p.type === "text")
-    for (const part of textParts) {
-      const content = part.text || part.content || ""
-      if (content) {
-        this.postMessageToWebview({
-          type: "message",
-          role: "assistant",
-          content: content,
-          messages: [],
-          attachments: []
-        })
-      }
-    }
+    this.postMessageToWebview({
+      type: "message",
+      messageId: message.id,
+      role: message.role || "assistant",
+      parts: message.parts || []
+    })
   }
 
   private handleToolOutput(data: any): void {
@@ -218,37 +140,21 @@ export class ChatPanel {
   }
 
   show(sessionId?: string): void {
-    if (this.panel && 'reveal' in this.panel) {
-      this.panel.reveal()
+    if (this.panel) {
+      if ('reveal' in this.panel) {
+        this.panel.reveal()
+      } else if ('focus' in this.panel) {
+        this.panel.focus()
+      }
+
       if (sessionId) {
         this.switchSession(sessionId)
       }
       return
     }
 
-    const extensionUri = vscode.extensions
-      .getExtension("opencode-ai.opencode-gui")
-      ?.extensionUri
-
-    const panel = vscode.window.createWebviewPanel(
-      "opencode.chat",
-      "OpenCode Chat",
-      vscode.ViewColumn.Two,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(extensionUri!, "webviews", "chat")
-        ]
-      }
-    )
-
-    this.panel = panel
-    this.setupWebview(panel, extensionUri!)
-
-    panel.onDidDispose(() => {
-      this.panel = null
-    }, null, this.disposables)
+    // If no panel and no sessionId, we might need to trigger the view focus
+    vscode.commands.executeCommand("opencodeChat.focus")
   }
 
   resolveWebviewView(webviewView: vscode.WebviewView, extensionUri: vscode.Uri): void {
@@ -323,6 +229,15 @@ export class ChatPanel {
         await this.handleFileSuggestions(message.searchTerm)
         break
 
+      case "openFile":
+        if (message.filePath) {
+          const uri = vscode.Uri.file(message.filePath);
+          vscode.workspace.openTextDocument(uri).then(doc => {
+            vscode.window.showTextDocument(doc, vscode.ViewColumn.One);
+          });
+        }
+        break
+
       default:
         console.warn("[ChatPanel] Unknown message type:", message.type)
     }
@@ -390,6 +305,7 @@ export class ChatPanel {
     try {
       const parts: MessagePart[] = [
         {
+          id: Math.random().toString(36).substring(7),
           type: "text",
           text
         }

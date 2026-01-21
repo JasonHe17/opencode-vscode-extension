@@ -233,31 +233,27 @@
     });
   }
 
-  function addMessage(role, content, attachments = []) {
+  function addMessage(role, content, parts = []) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
+    messageDiv.id = 'msg-' + Math.random().toString(36).substr(2, 9);
 
+    const header = document.createElement('div');
+    header.className = 'message-header';
     const icon = role === 'user' ? '👤' : '🤖';
-    const roleName = role === 'user' ? 'You' : (messageDiv.dataset.agent || currentAgent);
+    const name = role === 'user' ? 'You' : (messageDiv.dataset.agent || currentAgent);
+    header.innerHTML = `<span>${icon}</span> <span>${name}</span>`;
+    messageDiv.appendChild(header);
 
-    let attachmentsHtml = '';
-    if (attachments && attachments.length > 0) {
-      attachmentsHtml = attachments.map(attachment => {
-        if (attachment.type === 'tool') {
-          return renderToolExecution(attachment);
-        }
-        return '';
-      }).join('');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    messageDiv.appendChild(contentDiv);
+
+    if (parts && parts.length > 0) {
+      parts.forEach(part => renderPart(contentDiv, part));
+    } else if (content) {
+      renderPart(contentDiv, { type: 'text', text: content });
     }
-
-    messageDiv.innerHTML = `
-      <div class="message-icon">${icon}</div>
-      <div class="message-content">
-        <div class="message-role">${roleName}</div>
-        <div class="message-text">${formatMessage(content)}</div>
-        ${attachmentsHtml}
-      </div>
-    `;
 
     messagesContainer.appendChild(messageDiv);
     scrollToBottom();
@@ -265,78 +261,213 @@
     return messageDiv;
   }
 
-  function renderToolExecution(tool) {
-    const state = tool.state || 'pending';
-    const stateIcon = {
-      pending: '⏳',
-      running: '🔄',
-      completed: '✓',
-      error: '✗'
-    }[state];
-
-    let outputHtml = '';
-    if (tool.output) {
-      outputHtml = `<div class="tool-output">${escapeHtml(tool.output)}</div>`;
+  function renderPart(container, part) {
+    let partEl = container.querySelector(`[data-part-id="${part.id}"]`);
+    
+    if (part.type === 'text') {
+      if (!partEl) {
+        partEl = document.createElement('div');
+        partEl.className = 'message-text';
+        if (part.id) partEl.dataset.partId = part.id;
+        container.appendChild(partEl);
+      }
+      partEl.innerHTML = formatMessage(part.text || '');
+    } else if (part.type === 'reasoning') {
+      if (!partEl) {
+        partEl = document.createElement('div');
+        partEl.className = 'reasoning-container';
+        if (part.id) partEl.dataset.partId = part.id;
+        partEl.onclick = () => {
+          if (partEl.dataset.collapsed === 'true') {
+            partEl.dataset.collapsed = 'false';
+          } else if (partEl.dataset.completed === 'true') {
+            partEl.dataset.collapsed = 'true';
+          }
+        };
+        container.appendChild(partEl);
+      }
+      
+      const isCompleted = part.state?.status === 'completed';
+      if (isCompleted && !partEl.dataset.completed) {
+        partEl.dataset.completed = 'true';
+        partEl.dataset.collapsed = 'true';
+      }
+      
+      partEl.innerHTML = `<span class="reasoning-label">Thinking...</span>${formatMessage(part.text || '')}`;
+      
+      if (!isCompleted || partEl.dataset.collapsed !== 'true') {
+        partEl.scrollTop = partEl.scrollHeight;
+      }
+    } else if (part.type === 'tool') {
+      renderToolPart(container, part);
+    } else if (part.type === 'compaction') {
+      const divider = document.createElement('div');
+      divider.className = 'compaction-divider';
+      container.appendChild(divider);
     }
-
-    return `
-      <div class="tool-execution ${state}" data-tool-id="${tool.id}">
-        <div class="tool-header">
-          <span class="tool-icon">${stateIcon}</span>
-          <span class="tool-name">${escapeHtml(tool.name)}</span>
-          ${tool.command ? `<span class="tool-command">${escapeHtml(tool.command)}</span>` : ''}
-          <span class="tool-state">${state}</span>
-        </div>
-        ${outputHtml}
-      </div>
-    `;
   }
 
-  function updateToolExecution(toolId, updates) {
-    const toolElement = messagesContainer.querySelector(`[data-tool-id="${toolId}"]`);
-    if (!toolElement) return;
-
-    const state = updates.state || 'pending';
-    const stateIcon = {
-      pending: '⏳',
-      running: '🔄',
-      completed: '✓',
-      error: '✗'
-    }[state];
-
-    toolElement.className = `tool-execution ${state}`;
+  function renderToolPart(container, part) {
+    let partEl = container.querySelector(`[data-part-id="${part.id}"]`);
+    const state = part.state?.status || 'pending';
     
-    const stateSpan = toolElement.querySelector('.tool-state');
-    if (stateSpan) stateSpan.textContent = state;
-
-    const iconSpan = toolElement.querySelector('.tool-icon');
-    if (iconSpan) iconSpan.textContent = stateIcon;
-
-    if (updates.output) {
-      let outputDiv = toolElement.querySelector('.tool-output');
-      if (!outputDiv) {
-        const header = toolElement.querySelector('.tool-header');
-        outputDiv = document.createElement('div');
-        outputDiv.className = 'tool-output';
-        header.parentElement.insertBefore(outputDiv, header.nextSibling);
+    // Bash specialized rendering
+    if (part.tool === 'bash') {
+      if (!partEl) {
+        partEl = document.createElement('div');
+        partEl.className = 'tool-bash-container';
+        partEl.dataset.partId = part.id;
+        container.appendChild(partEl);
       }
-      outputDiv.textContent = updates.output;
+      const command = part.state?.input?.command || '';
+      const output = part.state?.output || '';
+      partEl.innerHTML = `
+        <div class="tool-bash-input">$ ${escapeHtml(command)}</div>
+        ${output ? `<div class="tool-bash-output">${escapeHtml(output)}</div>` : ''}
+      `;
+      const outputEl = partEl.querySelector('.tool-bash-output');
+      if (outputEl) outputEl.scrollTop = outputEl.scrollHeight;
+      return;
     }
 
-    scrollToBottom();
+    // Read specialized rendering (files only)
+    if (part.tool === 'read') {
+      if (!partEl) {
+        partEl = document.createElement('div');
+        partEl.className = 'tool-execution tool-inline';
+        partEl.dataset.partId = part.id;
+        container.appendChild(partEl);
+      }
+      const filePath = part.state?.input?.filePath || '...';
+      partEl.innerHTML = `<span>→</span> <span>read ${escapeHtml(filePath)}</span>`;
+      return;
+    }
+
+    // TUI styles for specific tools
+    if (part.tool === 'todowrite' && part.state?.status === 'completed') {
+      renderTodoList(container, part);
+      return;
+    }
+
+    if (['edit', 'write', 'apply_patch'].includes(part.tool) && part.state?.status === 'completed') {
+      renderDiffSummary(container, part);
+      return;
+    }
+
+    const isInline = !part.state?.output || part.state.status !== 'completed';
+    
+    if (!partEl) {
+      partEl = document.createElement('div');
+      partEl.dataset.partId = part.id;
+      container.appendChild(partEl);
+    }
+
+    const iconMap = {
+      bash: '$',
+      read: '→',
+      write: '←',
+      edit: '←',
+      glob: '✱',
+      grep: '✱',
+      todowrite: '⚙',
+      task: '◉'
+    };
+    const icon = iconMap[part.tool] || '⚙';
+    
+    if (isInline) {
+      partEl.className = `tool-execution tool-inline ${state}`;
+      const inputStr = formatToolInput(part.state?.input || {});
+      partEl.innerHTML = `<span>${icon}</span> <span>${part.tool} ${inputStr}</span>`;
+    } else {
+      partEl.className = 'tool-execution tool-block';
+      const title = part.state.metadata?.title || `# ${part.tool}`;
+      partEl.innerHTML = `
+        <div class="tool-header">
+          <span class="tool-name">${title}</span>
+        </div>
+        <div class="tool-output">${escapeHtml(part.state.output)}</div>
+      `;
+    }
+  }
+
+  function renderTodoList(container, part) {
+    let partEl = container.querySelector(`[data-part-id="${part.id}"]`);
+    if (!partEl) {
+      partEl = document.createElement('div');
+      partEl.className = 'todo-list';
+      partEl.dataset.partId = part.id;
+      container.appendChild(partEl);
+    }
+    
+    const todos = part.state.input?.todos || [];
+    partEl.innerHTML = todos.map(todo => {
+      const icon = {
+        completed: '☑',
+        in_progress: '⏳',
+        pending: '☐',
+        cancelled: '☒'
+      }[todo.status] || '☐';
+      return `<div class="todo-item"><span class="todo-status">${icon}</span> ${escapeHtml(todo.content)}</div>`;
+    }).join('');
+  }
+
+  function renderDiffSummary(container, part) {
+    let partEl = container.querySelector(`[data-part-id="${part.id}"]`);
+    if (!partEl) {
+      partEl = document.createElement('div');
+      partEl.className = 'diff-summary';
+      partEl.dataset.partId = part.id;
+      container.appendChild(partEl);
+    }
+
+    const filePath = part.state.input?.filePath || 'file';
+    partEl.innerHTML = `<span>📝</span> <span>Modified ${filePath}</span>`;
+    partEl.onclick = () => {
+      vscode.postMessage({
+        type: 'openFile',
+        filePath: part.state.input?.filePath,
+        content: part.state.input?.content || part.state.output
+      });
+    };
+  }
+
+  function formatToolInput(input) {
+    const entries = Object.entries(input)
+      .filter(([_, v]) => typeof v !== 'object')
+      .map(([k, v]) => `${k}=${v}`);
+    return entries.length > 0 ? `[${entries.join(', ')}]` : '';
   }
 
   function formatMessage(content) {
-    return escapeHtml(content)
-      .replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-        return `<pre><code>${escapeHtml(code)}</code></pre>`;
-      })
-      .replace(/`([^`]+)`/g, (match, code) => {
-        return `<code>${escapeHtml(code)}</code>`;
-      })
-      .replace(/@([^\s]+)/g, (match, path) => {
-        return `<span class="mention">@${escapeHtml(path)}</span>`;
-      });
+    // Basic Markdown Rendering (Simple subset)
+    let html = escapeHtml(content);
+    
+    // Code blocks
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+      return `<pre><code class="language-${lang}">${code}</code></pre>`;
+    });
+    
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, (match, code) => {
+      return `<code>${code}</code>`;
+    });
+
+    // Mentions
+    html = html.replace(/@([^\s]+)/g, (match, path) => {
+      return `<span class="mention">@${path}</span>`;
+    });
+
+    // Bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // Italic
+    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    // Lists
+    html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+    return html;
   }
 
   function escapeHtml(text) {
@@ -392,23 +523,45 @@
 
       case 'message':
         hideTypingIndicator();
-        const messageEl = addMessage(message.role, message.content, message.attachments);
-        if (message.toolExecutions) {
-          message.toolExecutions.forEach(tool => {
-            const attachmentsDiv = messageEl.querySelector('.message-content');
-            const toolHtml = renderToolExecution(tool);
-            attachmentsDiv.insertAdjacentHTML('beforeend', toolHtml);
-          });
+        if (message.parts) {
+          // Streaming or full message with parts
+          const existingMsg = document.getElementById('msg-' + message.messageId);
+          if (existingMsg) {
+            const contentDiv = existingMsg.querySelector('.message-content');
+            message.parts.forEach(part => renderPart(contentDiv, part));
+          } else {
+            const newMsg = addMessage(message.role, message.content, message.parts);
+            if (message.messageId) newMsg.id = 'msg-' + message.messageId;
+          }
+        } else {
+          addMessage(message.role, message.content);
         }
         isTyping = false;
         updateSendButton();
         break;
 
+      case 'messagePart':
+        hideTypingIndicator();
+        const msgId = 'msg-' + message.messageId;
+        let msgEl = document.getElementById(msgId);
+        if (!msgEl) {
+          msgEl = addMessage(message.role || 'assistant', '');
+          msgEl.id = msgId;
+        }
+        const container = msgEl.querySelector('.message-content');
+        renderPart(container, message.part);
+        scrollToBottom();
+        break;
+
       case 'toolUpdate':
-        updateToolExecution(message.toolId, message.updates);
-        if (message.updates.state === 'completed' || message.updates.state === 'error') {
-          isTyping = false;
-          updateSendButton();
+        // Reuse messagePart logic if tool is part of a message
+        if (message.messageId) {
+          const msgId = 'msg-' + message.messageId;
+          const msgEl = document.getElementById(msgId);
+          if (msgEl) {
+            const container = msgEl.querySelector('.message-content');
+            renderPart(container, { type: 'tool', ...message.updates, id: message.toolId });
+          }
         }
         break;
 
