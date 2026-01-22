@@ -64,8 +64,15 @@ export class ChatPanel {
     
     console.log(`[ChatPanel] Event type: ${eventType}, has currentSessionId: ${!!this.currentSessionId}`)
     
-    // Skip server.connected and other connection events
-    if (eventType === "server.connected" || eventType === "session.idle") {
+    if (eventType === "server.connected") {
+      return
+    }
+
+    if (eventType === "session.idle") {
+      this.postMessageToWebview({
+        type: "sessionIdle",
+        sessionId: properties?.sessionID
+      })
       return
     }
     
@@ -96,16 +103,18 @@ export class ChatPanel {
   private handleMessagePartUpdated(data: any): void {
     const part = data.part || data
     if (!part) return
-    
+
     const messageId = data.messageID || data.id || part.messageID
     const sender = data.sender || part.sender
     const role = sender === "user" ? "user" : "assistant"
-    
+
     if (role === "user") return
 
-    // Post individual part update for streaming
+    const sessionId = data.sessionID || part.sessionID
+
     this.postMessageToWebview({
       type: "messagePart",
+      sessionId,
       messageId: messageId,
       role: role,
       part: part
@@ -119,41 +128,47 @@ export class ChatPanel {
   private handleMessageCreated(data: any): void {
     const message = data.message || data
     if (!message) return
-    
+
+    const sessionId = message.sessionID || data.sessionID
+
     this.postMessageToWebview({
       type: "message",
-      messageId: message.id,
+      sessionId,
+      id: message.id,
       role: message.role || "assistant",
       parts: message.parts || []
     })
   }
 
   private handleToolOutput(data: any): void {
+    if (!data?.messageID || !data?.toolID) return
     const toolData = {
       type: "toolUpdate" as const,
+      sessionId: data.sessionID,
+      messageId: data.messageID,
       toolId: data.toolID,
       updates: {
-        output: data.output
+        output: data.output,
+        state: data.state,
+        tool: data.tool,
+        title: data.title
       }
     }
     this.postMessageToWebview(toolData)
   }
 
   show(sessionId?: string): void {
-    if (this.panel) {
-      if ('reveal' in this.panel) {
-        this.panel.reveal()
-      } else if ('focus' in this.panel) {
-        this.panel.focus()
-      }
+    if (sessionId) {
+      this.switchSession(sessionId)
+    }
 
-      if (sessionId) {
-        this.switchSession(sessionId)
+    if (this.panel) {
+      if ("reveal" in this.panel) {
+        this.panel.reveal()
       }
       return
     }
 
-    // If no panel and no sessionId, we might need to trigger the view focus
     vscode.commands.executeCommand("opencodeChat.focus")
   }
 
@@ -346,10 +361,15 @@ export class ChatPanel {
       const filePath = fileUri[0].fsPath
       this.postMessageToWebview({
         type: "message",
+        sessionId: this.currentSessionId,
+        id: `attachment-${Date.now()}`,
         role: "user",
-        content: `Attached: ${filePath}`,
-        messages: [],
-        attachments: []
+        parts: [
+          {
+            type: "text",
+            content: `Attached: ${filePath}`
+          }
+        ]
       })
     }
   }
@@ -369,7 +389,8 @@ export class ChatPanel {
 
     this.postMessageToWebview({
       type: "fileSuggestions",
-      files: filteredFiles
+      files: filteredFiles,
+      sessionId: this.currentSessionId
     })
   }
 
@@ -404,7 +425,7 @@ export class ChatPanel {
   }
 
   private postMessageToWebview(message: any): void {
-    if (this.panel) {
+    if (this.panel?.webview) {
       this.panel.webview.postMessage(message)
     }
   }

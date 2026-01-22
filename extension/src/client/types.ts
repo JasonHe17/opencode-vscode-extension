@@ -28,6 +28,8 @@ export interface MessagePart {
   callID?: string
   filename?: string
   mime?: string
+  messageID?: string
+  sessionID?: string
 }
 
 export interface BusEvent {

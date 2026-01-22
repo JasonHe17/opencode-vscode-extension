@@ -1,5 +1,10 @@
 declare const acquireVsCodeApi: () => any
-const vscode = acquireVsCodeApi()
+const vscodeApi = acquireVsCodeApi()
+
+function resetState(): void {
+  messages = []
+  messagesContainer.innerHTML = ""
+}
 
 const messagesContainer = document.getElementById("messages")!
 const messageInput = document.getElementById("messageInput") as HTMLTextAreaElement
@@ -10,6 +15,8 @@ const agentSelect = document.getElementById("agentSelect") as HTMLSelectElement
 const modelSelect = document.getElementById("modelSelect") as HTMLSelectElement
 
 let messages: any[] = []
+let currentSessionId: string | null = null
+let currentSessionTitle: string | null = null
 
 agentSelect.addEventListener("change", () => {
   postMessage({
@@ -26,7 +33,7 @@ modelSelect.addEventListener("change", () => {
 })
 
 function postMessage(message: any): void {
-  vscode.postMessage(message)
+  vscodeApi.postMessage(message)
 }
 
 function renderMessage(message: any): void {
@@ -45,12 +52,17 @@ function renderMessage(message: any): void {
 
   message.parts.forEach((part: any) => {
     if (part.type === "text") {
-      contentDiv.appendChild(renderTextPart(part.content))
+      const textDiv = renderTextPart(getPartContent(part))
+      textDiv.setAttribute("data-part-id", part.id || "")
+      textDiv.className = "message-text"
+      contentDiv.appendChild(textDiv)
     } else if (part.type === "tool") {
       const toolHtml = renderToolExecution(part.content)
+      toolHtml.setAttribute("data-part-id", part.id || "")
       contentDiv.appendChild(toolHtml)
     } else if (part.type === "reasoning") {
-      renderReasoningPart(part.content, contentDiv)
+      const reasoningDiv = renderReasoningPart(getPartContent(part), contentDiv)
+      reasoningDiv.setAttribute("data-part-id", part.id || "")
     }
   })
 
@@ -65,11 +77,18 @@ function renderTextPart(text: string): HTMLElement {
   return pre
 }
 
-function renderReasoningPart(content: any, container: HTMLElement): void {
+function getPartContent(part: any): string {
+  if (part?.content && typeof part.content === "string") return part.content
+  if (part?.text && typeof part.text === "string") return part.text
+  if (part?.content?.html && typeof part.content.html === "string") return part.content.html
+  return part?.content ? String(part.content) : ""
+}
+
+function renderReasoningPart(content: any, container: HTMLElement): HTMLElement {
   const reasoningDiv = document.createElement("div")
   reasoningDiv.className = "reasoning-container"
   reasoningDiv.setAttribute("data-collapsed", "true")
-  
+
   const label = document.createElement("div")
   label.className = "reasoning-label"
   label.innerHTML = `<span class="reasoning-icon">🧠</span> Thinking... <span class="collapse-icon">▼</span>`
@@ -77,15 +96,17 @@ function renderReasoningPart(content: any, container: HTMLElement): void {
 
   const textDiv = document.createElement("div")
   textDiv.className = "reasoning-content"
-  
+
   if (content && typeof content === "object" && content.html) {
     textDiv.innerHTML = content.html
   } else if (typeof content === "string") {
     textDiv.textContent = content
+  } else if (typeof content === "number") {
+    textDiv.textContent = String(content)
   }
-  
+
   reasoningDiv.appendChild(textDiv)
-  
+
   label.addEventListener("click", (e) => {
     const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
     if (isCollapsed) {
@@ -98,6 +119,7 @@ function renderReasoningPart(content: any, container: HTMLElement): void {
   })
 
   container.appendChild(reasoningDiv)
+  return reasoningDiv
 }
 
 function updateCollapseIcon(reasoningDiv: HTMLElement): void {
@@ -109,6 +131,7 @@ function updateCollapseIcon(reasoningDiv: HTMLElement): void {
 }
 
 function updateMessagePart(messageId: string, partId: string, part: any): void {
+  if (!partId) return
   const message = messages.find((m) => m.id === messageId)
   if (!message) return
 
@@ -130,6 +153,8 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
             textDiv.innerHTML = part.content.html
           } else if (typeof part.content === "string") {
             textDiv.textContent = part.content
+          } else if (typeof part.text === "string") {
+            textDiv.textContent = part.text
           }
           reasoningEl.scrollTop = reasoningEl.scrollHeight
         }
@@ -137,7 +162,7 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
     } else if (part.type === "text") {
       const textEl = contentDiv.querySelector(`.message-text[data-part-id="${partId}"]`)
       if (textEl) {
-        textEl.textContent = part.content
+        textEl.textContent = getPartContent(part)
       }
     }
   } else {
@@ -156,8 +181,10 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
       textDiv.className = "reasoning-content"
       if (part.content && typeof part.content === "object" && part.content.html) {
         textDiv.innerHTML = part.content.html
-      } else {
+      } else if (typeof part.content === "string") {
         textDiv.textContent = part.content
+      } else if (typeof part.text === "string") {
+        textDiv.textContent = part.text
       }
       reasoningDiv.appendChild(textDiv)
       
@@ -184,7 +211,7 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
       contentDiv.querySelectorAll(".reasoning-container").forEach(r => r.setAttribute("data-collapsed", "true"))
       contentDiv.querySelectorAll(".reasoning-container").forEach(r => updateCollapseIcon(r as HTMLElement))
 
-      const textDiv = renderTextPart(part.content)
+      const textDiv = renderTextPart(getPartContent(part))
       textDiv.setAttribute("data-part-id", partId)
       textDiv.className = "message-text"
       contentDiv.appendChild(textDiv)
@@ -307,23 +334,45 @@ window.addEventListener("message", (event) => {
   console.log("Webview received message:", message.type, message)
 
   switch (message.type) {
-    case "messageAdd":
-      renderMessage(message.message)
-      messages.push(message.message)
-      break
-
-    case "messageHistory":
-      messages = message.messages
+    case "init":
+      currentSessionId = message.sessionId || null
+      currentSessionTitle = message.sessionTitle || "New Session"
+      const titleEl = document.getElementById("sessionTitle")
+      if (titleEl) titleEl.textContent = currentSessionTitle
+      messages = message.messages || []
       messagesContainer.innerHTML = ""
       messages.forEach(renderMessage)
       break
 
-    case "messagePartUpdate":
-      updateMessagePart(message.messageId, message.partId, message.part)
+    case "message":
+      if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
+        break
+      }
+      renderMessage(message)
+      messages.push(message)
+      break
+
+    case "messagePart":
+      if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
+        break
+      }
+      updateMessagePart(message.messageId, message.partId || message.part?.id, message.part)
+      break
+
+    case "toolUpdate":
+      if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
+        break
+      }
+      if (message.toolId && message.updates) {
+        updateMessagePart(message.messageId, message.toolId, {
+          id: message.toolId,
+          type: "tool",
+          content: message.updates
+        })
+      }
       break
 
     case "sessionIdle":
-      console.log("Session idle:", message.sessionId)
       messagesContainer.querySelectorAll(".reasoning-container").forEach(r => {
         r.setAttribute("data-collapsed", "true")
         updateCollapseIcon(r as HTMLElement)
@@ -331,7 +380,7 @@ window.addEventListener("message", (event) => {
       break
 
     case "fileSuggestions":
-      showFileSuggestions(message.suggestions)
+      showFileSuggestions(message.files || message.suggestions || [])
       break
 
     case "insertText":
@@ -343,7 +392,7 @@ window.addEventListener("message", (event) => {
       break
 
     case "serverStatus":
-      updateSelectors(message.agents, message.models)
+      updateSelectors(message.agents || [], message.models || [])
       break
   }
 })
@@ -394,7 +443,7 @@ function updateSelectors(agents: string[], modelGroups: Array<{ providerID: stri
 // Initial init request
 setTimeout(() => {
   console.log("Sending init request...");
-  vscode.postMessage({ type: "init" });
+  vscodeApi.postMessage({ type: "init" });
 }, 100);
 
 function showFileSuggestions(suggestions: any[]): void {
@@ -435,6 +484,11 @@ function insertText(text: string): void {
 }
 
 sendButton.addEventListener("click", sendMessage)
+attachButton.addEventListener("click", () => {
+  postMessage({
+    type: "attachFile"
+  })
+})
 messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault()
@@ -467,8 +521,8 @@ messageInput.addEventListener("input", (e) => {
   if (mentionMatch) {
     const searchTerm = mentionMatch[1]
     postMessage({
-      type: "showFileSuggestions",
-      text: beforeCursor
+      type: "requestFileSuggestions",
+      searchTerm
     })
   } else {
     fileSuggestions.hidden = true

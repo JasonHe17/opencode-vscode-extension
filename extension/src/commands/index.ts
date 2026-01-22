@@ -53,9 +53,11 @@ function registerSessionCommands(context: vscode.ExtensionContext): void {
     async () => {
       const { SessionManager } = await import("../session/SessionManager.js")
       const manager = SessionManager.getInstance()
-      await manager.loadSessions()
+      if (manager) {
+        await manager.loadSessions()
+      }
       // Force refresh of the tree view
-      await vscode.commands.executeCommand("workbench.actions.treeView.sessionTree.refresh")
+      await vscode.commands.executeCommand("opencode.sessionTree.refresh")
     }
   )
 
