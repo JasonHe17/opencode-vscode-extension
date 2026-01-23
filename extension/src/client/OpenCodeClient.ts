@@ -416,10 +416,23 @@ export class OpenCodeClient {
       const response = await this.sdk.session.messages({ sessionID: id })
       
       // Handle different response formats based on sdk.gen.ts (SessionMessagesResponses)
-      const messages = response.data || response.body || response || []
-      console.log(`[OpenCodeClient] Got ${Array.isArray(messages) ? messages.length : 0} messages`)
+      const rawMessages = response.data || response.body || response || []
+      console.log(`[OpenCodeClient] Got ${Array.isArray(rawMessages) ? rawMessages.length : 0} raw messages`)
       
-      return Array.isArray(messages) ? messages : []
+      // Flatten the response format: { info: Message, parts: Array<Part> } -> { id, role, parts, ... }
+      const messages = Array.isArray(rawMessages) ? rawMessages.map((msg: any) => {
+        const info = msg.info || msg
+        return {
+          id: info.id,
+          role: info.role,
+          sessionID: info.sessionID,
+          parts: msg.parts || [],
+          time: info.time
+        }
+      }) : []
+      
+      console.log(`[OpenCodeClient] Processed ${messages.length} flattened messages`)
+      return messages
     } catch (error) {
       console.error("[OpenCodeClient] Failed to get session messages:", error)
       throw error
