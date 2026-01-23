@@ -142,16 +142,22 @@ export class ChatPanel {
 
   private handleToolOutput(data: any): void {
     if (!data?.messageID || !data?.toolID) return
+    
+    const part = data.part || data
     const toolData = {
-      type: "toolUpdate" as const,
+      type: "toolUpdate",
       sessionId: data.sessionID,
       messageId: data.messageID,
-      toolId: data.toolID,
+      toolId: data.toolID || part?.id,
       updates: {
-        output: data.output,
-        state: data.state,
-        tool: data.tool,
-        title: data.title
+        tool: part?.tool || data.tool,
+        state: part?.state || {
+          status: data.state || "pending",
+          input: part?.state?.input || {},
+          output: data.output || part?.state?.output || "",
+          title: data.title || part?.state?.title || "",
+          error: data.error || part?.state?.error || ""
+        }
       }
     }
     this.postMessageToWebview(toolData)
@@ -196,15 +202,21 @@ export class ChatPanel {
 
   private setupWebview(panel: vscode.WebviewPanel | vscode.WebviewView, extensionUri: vscode.Uri): void {
     const htmlPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "index.html")
+    const cssPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "styles.css")
     const jsPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "main.js")
     
     let html = htmlPath.fsPath
     const fileContent = require("fs").readFileSync(html, "utf8")
     
-    let htmlContent = fileContent.replace(
-      /<script src="main.js"><\/script>/,
-      `<script src="${panel.webview.asWebviewUri(jsPath)}"></script>`
-    )
+    let htmlContent = fileContent
+      .replace(
+        /<link rel="stylesheet" href="styles.css">/,
+        `<link rel="stylesheet" href="${panel.webview.asWebviewUri(cssPath)}">`
+      )
+      .replace(
+        /<script src="main.js"><\/script>/,
+        `<script src="${panel.webview.asWebviewUri(jsPath)}"></script>`
+      )
 
     panel.webview.html = htmlContent
 

@@ -57,12 +57,15 @@ function renderMessage(message: any): void {
       textDiv.className = "message-text"
       contentDiv.appendChild(textDiv)
     } else if (part.type === "tool") {
-      const toolHtml = renderToolExecution(part.content)
+      console.log("[renderMessage] Rendering tool part:", part)
+      const toolHtml = renderToolExecution(part.content || part)
       toolHtml.setAttribute("data-part-id", part.id || "")
       contentDiv.appendChild(toolHtml)
     } else if (part.type === "reasoning") {
       const reasoningDiv = renderReasoningPart(getPartContent(part), contentDiv)
       reasoningDiv.setAttribute("data-part-id", part.id || "")
+    } else {
+      console.log("[renderMessage] Unknown part type:", part.type, part)
     }
   })
 
@@ -224,18 +227,35 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
 function renderToolExecution(content: any): HTMLElement {
   const div = document.createElement("div")
   
-  const toolHtml = content.html || constructToolHtml(content)
-  div.innerHTML = toolHtml
+  try {
+    const toolHtml = content.html || constructToolHtml(content)
+    div.innerHTML = toolHtml
+  } catch (error) {
+    console.error("[renderToolExecution] Error rendering tool:", error, content)
+    div.innerHTML = `<div class="tool-execution tool-error">
+      <div class="tool-header">
+        <span class="tool-icon">⚠️</span>
+        <span class="tool-name">Error rendering tool</span>
+      </div>
+      <pre class="tool-output">${escapeHtml(String(content) || "Unknown error")}</pre>
+    </div>`
+  }
   
   return div
 }
 
 function constructToolHtml(content: any): string {
-  const state = content.state || "pending"
-  const toolName = content.tool?.name || content.toolName || "Unknown Tool"
-  const title = content.output?.title || content.title || ""
-  const output = content.output?.output || content.output || ""
-  const error = content.output?.error || content.error || ""
+  console.log("[constructToolHtml] Input content:", JSON.stringify(content, null, 2))
+  
+  const state = content.state || content
+  
+  const toolName = content.tool || content.toolName || content.toolData?.name || "Unknown Tool"
+  
+  const stateStatus = state?.status || "pending"
+  const title = state?.title || content.title || ""
+  const output = state?.output || content.output || ""
+  const error = state?.error || content.error || ""
+  const toolInput = state?.input || content.input || {}
   
   const stateIcons = {
     pending: "⏳",
@@ -245,10 +265,10 @@ function constructToolHtml(content: any): string {
   }
   
   const icon = getToolIcon(toolName)
-  const stateIcon = stateIcons[state as keyof typeof stateIcons] || "⏳"
+  const stateIcon = stateIcons[stateStatus as keyof typeof stateIcons] || "⏳"
   
   let html = `
-    <div class="tool-execution" data-state="${state}">
+    <div class="tool-execution" data-state="${stateStatus}">
       <div class="tool-header">
         <span class="tool-icon">${icon}</span>
         <span class="tool-name">${escapeHtml(toolName)}</span>
@@ -260,32 +280,81 @@ function constructToolHtml(content: any): string {
     html += `<div class="tool-title">${escapeHtml(title)}</div>`
   }
   
-  if (state === "error" && error) {
+  const shouldRenderCommandOutput = (toolName === "bash" && toolInput?.command) ||
+                                    (toolInput?.command || toolInput?.description || toolInput?.location)
+  
+  if (shouldRenderCommandOutput) {
     html += `
-      <div class="tool-error">
-        <pre>${escapeHtml(error)}</pre>
-      </div>
+      <div class="tool-content">
+        <div class="tool-command-section">
+          <div class="tool-command-label">Command</div>
+          <pre class="tool-command">${escapeHtml(toolInput.command || toolInput.description || toolInput.location || "")}</pre>
+        </div>
     `
+  }
+  
+  if (stateStatus === "error" && error) {
+    if (shouldRenderCommandOutput) {
+      html += `
+        <div class="tool-output-section">
+          <div class="tool-output-label">Error</div>
+          <pre class="tool-output tool-error">${escapeHtml(error)}</pre>
+        </div>
+      `
+    } else {
+      html += `
+        <div class="tool-error">
+          <pre>${escapeHtml(error)}</pre>
+        </div>
+      `
+    }
   } else if (output) {
     const shouldCollapse = output.length > 500 || output.split("\n").length > 20
     
     if (shouldCollapse) {
       html += `
-        <div class="tool-content" data-collapsed="true">
-          <div class="output-toggle" onclick="toggleToolOutput(this)">
+        <div class="tool-output-section" data-collapsed="true">
+          <div class="output-toggle" onclick="toggleToolSection(this)">
             <span class="toggle-icon">▶</span>
-            ${escapeHtml(output.substring(0, 100))}...
+            <span class="tool-output-label">Output</span>
           </div>
           <pre class="tool-output">${escapeHtml(output)}</pre>
         </div>
       `
     } else {
-      html += `<pre class="tool-output">${escapeHtml(output)}</pre>`
+      html += `
+        <div class="tool-output-section">
+          <div class="tool-output-label">Output</div>
+          <pre class="tool-output">${escapeHtml(output)}</pre>
+        </div>
+      `
     }
-  } else if (state === "pending") {
-    html += `<div class="tool-pending">Waiting for execution...</div>`
-  } else if (state === "running") {
-    html += `<div class="tool-running">Executing...</div>`
+  } else if (stateStatus === "pending") {
+    if (shouldRenderCommandOutput) {
+      html += `
+        <div class="tool-output-section">
+          <div class="tool-output-label">Output</div>
+          <div class="tool-pending">Waiting for execution...</div>
+        </div>
+      `
+    } else {
+      html += `<div class="tool-pending">Waiting for execution...</div>`
+    }
+  } else if (stateStatus === "running") {
+    if (shouldRenderCommandOutput) {
+      html += `
+        <div class="tool-output-section">
+          <div class="tool-output-label">Output</div>
+          <div class="tool-running">Executing...</div>
+        </div>
+      `
+    } else {
+      html += `<div class="tool-running">Executing...</div>`
+    }
+  }
+  
+  if (shouldRenderCommandOutput) {
+    html += `</div>`
   }
   
   html += `</div>`
@@ -320,6 +389,28 @@ function escapeHtml(text: string): string {
     "'": "&#039;"
   }
   return text.replace(/[&<>"']/g, (char) => escaped[char as keyof typeof escaped])
+}
+
+;(window as any).toggleToolSection = function(toggle: HTMLElement): void {
+  const section = toggle.parentElement as HTMLElement
+  if (section) {
+    const isCollapsed = section.getAttribute("data-collapsed") === "true"
+    console.log("[toggleToolSection] Current state:", isCollapsed, "section:", section.className)
+    
+    if (isCollapsed) {
+      section.removeAttribute("data-collapsed")
+    } else {
+      section.setAttribute("data-collapsed", "true")
+    }
+    
+    const newState = section.getAttribute("data-collapsed") === "true"
+    console.log("[toggleToolSection] New state:", newState)
+    
+    const icon = toggle.querySelector(".toggle-icon") as HTMLElement
+    if (icon) {
+      icon.textContent = isCollapsed ? "▼" : "▶"
+    }
+  }
 }
 
 ;(window as any).toggleToolOutput = function(toggle: HTMLElement): void {

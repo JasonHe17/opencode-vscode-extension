@@ -2,7 +2,7 @@
   "name": "opencode-gui",
   "displayName": "OpenCode",
   "description": "Graphical user interface for OpenCode AI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "opencode-ai",
   "engines": {
     "vscode": "^1.94.0"

@@ -4,7 +4,7 @@ A graphical user interface for OpenCode AI, providing a rich VSCode extension ex
 
 ## Version
 
-Current version: **0.0.2**
+Current version: **0.1.1**
 
 See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
 
