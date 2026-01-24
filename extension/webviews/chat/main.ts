@@ -422,17 +422,29 @@ function escapeHtml(text: string): string {
 
 window.addEventListener("message", (event) => {
   const message = event.data
-  console.log("Webview received message:", message.type, message)
+  console.log("[Webview] Received message type:", message.type)
 
   switch (message.type) {
     case "init":
+      console.log("[init] Switching to session:", message.sessionId, "Previous:", currentSessionId)
       currentSessionId = message.sessionId || null
       currentSessionTitle = message.sessionTitle || "New Session"
       const titleEl = document.getElementById("sessionTitle")
       if (titleEl) titleEl.textContent = currentSessionTitle
+      
+      resetState()
+      
       messages = message.messages || []
       messagesContainer.innerHTML = ""
       messages.forEach(renderMessage)
+      
+      console.log("[init] Initialized with", messages.length, "messages, sessionId:", currentSessionId)
+      
+      if (currentSessionId) {
+        console.log("[init] Focusing input for session:", currentSessionId)
+        messageInput.value = ""
+        messageInput.focus()
+      }
       break
 
     case "message":
@@ -489,9 +501,8 @@ window.addEventListener("message", (event) => {
 })
 
 function updateSelectors(agents: string[], modelGroups: Array<{ providerID: string; models: string[] }>): void {
-  console.log("Updating selectors with models:", modelGroups)
+  console.log(`[updateSelectors] Updating selectors with ${modelGroups.length} providers`)
   
-  // Update Agents
   const currentAgent = agentSelect.value
   agentSelect.innerHTML = ""
   agents.forEach(agent => {
@@ -502,11 +513,9 @@ function updateSelectors(agents: string[], modelGroups: Array<{ providerID: stri
     agentSelect.appendChild(option)
   })
 
-  // Update Models
   const currentModel = modelSelect.value
   modelSelect.innerHTML = ""
   
-  // Add default/auto option
   const defaultOpt = document.createElement("option")
   defaultOpt.value = ""
   defaultOpt.textContent = "Default Model"
@@ -526,12 +535,9 @@ function updateSelectors(agents: string[], modelGroups: Array<{ providerID: stri
       })
       modelSelect.appendChild(optgroup)
     })
-  } else {
-    console.warn("No models received from server")
   }
 }
 
-// Initial init request
 setTimeout(() => {
   console.log("Sending init request...");
   vscodeApi.postMessage({ type: "init" });

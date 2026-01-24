@@ -53,12 +53,29 @@ export class ChatPanel {
     this.eventListenerRemover = this.client.addEventListener((event: any) => {
       this.handleServerEvent(event)
     })
+    
+    this.disposables.push(
+      this.sessionManager.onSessionEvent((event) => {
+        console.log(`[ChatPanel] SessionManager event: ${event.type}, sessionId: ${event.sessionId}`)
+        
+        if (event.type === "deleted" && event.sessionId === this.currentSessionId) {
+          console.log(`[ChatPanel] Current session deleted, clearing chat display`)
+          this.currentSessionId = null
+          this.postMessageToWebview({
+            type: "init",
+            sessionId: null,
+            sessionTitle: "No Active Session",
+            agent: this.currentAgent,
+            messages: []
+          })
+        }
+      })
+    )
   }
 
   private handleServerEvent(event: BusEvent): void {
     const eventData = event.data as any
     
-    // Handle different event structures
     const eventType = eventData?.type || event.type
     const properties = eventData?.properties || eventData
     
@@ -69,16 +86,34 @@ export class ChatPanel {
     }
 
     if (eventType === "session.idle") {
+      const sessionId = properties?.sessionID || this.currentSessionId
       this.postMessageToWebview({
         type: "sessionIdle",
-        sessionId: properties?.sessionID
+        sessionId
       })
+      
+      if (sessionId && !sessionId.startsWith("temp_")) {
+        this.sessionManager.loadSessions(true).catch((error) => {
+          console.error("[ChatPanel] Failed to refresh sessions:", error)
+        })
+      }
       return
     }
     
-    // Check session ID if present
-    if (properties?.sessionID && properties.sessionID !== this.currentSessionId) {
-      return
+    const sessionEventId = properties?.sessionID || properties?.sessionId
+    
+    if (sessionEventId) {
+      if (this.currentSessionId?.startsWith("temp_") && !sessionEventId.startsWith("temp_")) {
+        const pendingId = this.sessionManager.getPendingSessionId()
+        if (pendingId && !sessionEventId.startsWith("temp_")) {
+          this.currentSessionId = sessionEventId
+          console.log(`[ChatPanel] Updated currentSessionId from temp to real: ${sessionEventId}`)
+        }
+      }
+      
+      if (this.currentSessionId && this.currentSessionId !== sessionEventId && !sessionEventId.startsWith("temp_")) {
+        return
+      }
     }
 
     switch (eventType) {
@@ -319,15 +354,16 @@ export class ChatPanel {
       this.currentModel = modelID ? { providerID, modelID } : undefined
     }
 
-    // Store last user message for duplicate detection
-    this.lastUserMessage = text
+    let targetSessionId = sessionId || this.currentSessionId || this.sessionManager.getActiveSession()?.id
 
-    let targetSessionId = sessionId
     if (!targetSessionId) {
-      const session = await this.sessionManager.createSession({
-        title: text.substring(0, 50)
+      console.log("[ChatPanel] No active session, creating placeholder session for new message")
+      const session = this.sessionManager.createPlaceholderSession({
+        title: text.substring(0, 50),
+        agent: this.currentAgent
       })
       targetSessionId = session.id
+      this.currentSessionId = targetSessionId
       this.switchSession(targetSessionId)
     }
 
@@ -345,7 +381,14 @@ export class ChatPanel {
 
       this.client.startPolling(1000)
 
-      await this.client.prompt(targetSessionId, {
+      await this.sessionManager.ensureSessionCreated(targetSessionId, {
+        title: text.substring(0, 50)
+      })
+
+      const realSessionId = this.sessionManager.getPendingSessionId() || targetSessionId
+      this.currentSessionId = realSessionId
+
+      await this.client.prompt(realSessionId, {
         agent: this.currentAgent,
         model: this.currentModel,
         parts
@@ -413,8 +456,15 @@ export class ChatPanel {
     if (session) {
       try {
         console.log(`[ChatPanel] Switching to session ${sessionId}, fetching history...`)
-        const messagesResponse = await this.client.getSessionMessages(sessionId)
-        console.log(`[ChatPanel] Fetched ${messagesResponse.length} messages for history`)
+        
+        let messagesResponse: any[] = []
+        
+        if (!sessionId.startsWith("temp_")) {
+          messagesResponse = await this.client.getSessionMessages(sessionId)
+          console.log(`[ChatPanel] Fetched ${messagesResponse.length} messages for history`)
+        } else {
+          console.log("[ChatPanel] Placeholder session, clearing display and showing empty state")
+        }
         
         this.postMessageToWebview({
           type: "init",
@@ -433,6 +483,16 @@ export class ChatPanel {
           messages: []
         })
       }
+    } else {
+      console.log(`[ChatPanel] Session ${sessionId} not found, clearing chat`)
+      this.currentSessionId = null
+      this.postMessageToWebview({
+        type: "init",
+        sessionId: null,
+        sessionTitle: "No Active Session",
+        agent: this.currentAgent,
+        messages: []
+      })
     }
   }
 

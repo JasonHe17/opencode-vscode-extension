@@ -14,8 +14,14 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
     this.sessionManager = sessionManager
 
     this.disposables.push(
-      this.sessionManager.onSessionEvent(() => {
-        this.refresh()
+      this.sessionManager.onSessionEvent((event) => {
+        console.log(`[SessionTreeProvider] Received event: ${event.type}, sessionId: ${event.sessionId}`)
+        if (event.type === "created" || event.type === "updated" || event.type === "deleted") {
+          setTimeout(() => {
+            console.log(`[SessionTreeProvider] Refreshing tree view...`)
+            this.refresh()
+          }, 100)
+        }
       })
     )
   }
@@ -33,9 +39,15 @@ export class SessionTreeProvider implements vscode.TreeDataProvider<SessionTreeI
       return Promise.resolve(_element.children)
     }
 
-    return Promise.resolve(
-      this.sessionManager.getAllSessions().map((session) => new SessionTreeItem(session))
-    )
+    const allSessions = this.sessionManager.getAllSessions()
+    console.log(`[SessionTreeProvider] getChildren called: ${allSessions.length} sessions`)
+    
+    const result = allSessions.map((session) => {
+      console.log(`[SessionTreeProvider] Creating tree item for session: ${session.id} - ${session.title}`)
+      return new SessionTreeItem(session)
+    })
+    
+    return Promise.resolve(result)
   }
 
   getParent(_element: SessionTreeItem): Promise<SessionTreeItem | undefined> {

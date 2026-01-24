@@ -7,6 +7,26 @@ export function registerAllCommands(context: vscode.ExtensionContext): void {
   registerSessionCommands(context)
   registerChatCommands(context)
   registerConfigCommands(context)
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "opencode.sessions.refresh",
+      async () => {
+        console.log("[opencode.sessions.refresh] Refresh command triggered")
+        const { SessionManager } = await import("../session/SessionManager.js")
+        const manager = SessionManager.getInstance()
+        if (manager) {
+          await manager.loadSessions(true)
+          setTimeout(async () => {
+            const { getSessionTreeProvider } = await import("../session/SessionTreeProvider.js")
+            const treeProvider = getSessionTreeProvider(manager)
+            console.log("[opencode.sessions.refresh] Manually refreshing tree view")
+            treeProvider?.refresh?.()
+          }, 100)
+        }
+      }
+    )
+  )
 }
 
 function registerSessionCommands(context: vscode.ExtensionContext): void {
@@ -48,26 +68,12 @@ function registerSessionCommands(context: vscode.ExtensionContext): void {
     }
   )
 
-  const refreshSessionsCommand = vscode.commands.registerCommand(
-    "opencode.sessions.refresh",
-    async () => {
-      const { SessionManager } = await import("../session/SessionManager.js")
-      const manager = SessionManager.getInstance()
-      if (manager) {
-        await manager.loadSessions()
-      }
-      // Force refresh of the tree view
-      await vscode.commands.executeCommand("opencode.sessionTree.refresh")
-    }
-  )
-
   context.subscriptions.push(
     createSessionCommand,
     setActiveSessionCommand,
     deleteSessionCommand,
     forkSessionCommand,
-    showSessionCommand,
-    refreshSessionsCommand
+    showSessionCommand
   )
 }
 
@@ -81,8 +87,8 @@ function registerChatCommands(context: vscode.ExtensionContext): void {
 
   const sendMessageCommand = vscode.commands.registerCommand(
     "opencode.chat.send",
-    async (sessionId: string, message: string) => {
-      await sendMessage(sessionId, message)
+    async (sessionId: string, _message: string) => {
+      await sendMessage(sessionId, _message)
     }
   )
 

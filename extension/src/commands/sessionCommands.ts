@@ -1,13 +1,22 @@
 import * as vscode from "vscode"
 import { getSessionManager } from "../session/SessionManager.js"
+import { getChatPanel } from "../chat/ChatPanel.js"
 
 export async function createSession(
   options?: { title?: string; agent?: string; model?: { providerID: string; modelID: string } }
 ): Promise<void> {
   const sessionManager = getSessionManager()
+  const chatPanel = getChatPanel(sessionManager)
+  
   try {
-    const session = await sessionManager.createSession(options)
-    await vscode.commands.executeCommand("opencode.chat.open", session.id)
+    console.log("[createSession] Creating new placeholder session")
+    
+    const session = sessionManager.createPlaceholderSession(options)
+    await vscode.commands.executeCommand("opencodeChat.focus")
+    
+    await chatPanel.show(session.id)
+    
+    console.log("[createSession] Placeholder session created and chat shown:", session.id)
   } catch (error) {
     vscode.window.showErrorMessage(`Failed to create session: ${error}`)
   }

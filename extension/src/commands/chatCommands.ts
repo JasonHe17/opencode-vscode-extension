@@ -19,7 +19,7 @@ export async function openChat(sessionId?: string): Promise<void> {
   }
 }
 
-export async function sendMessage(sessionId: string, message: string): Promise<void> {
+export async function sendMessage(sessionId: string, _message: string): Promise<void> {
   const sessionManager = getSessionManager()
   const chatPanel = getChatPanel(sessionManager)
   

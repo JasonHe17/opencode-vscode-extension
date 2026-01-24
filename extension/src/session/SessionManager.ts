@@ -22,6 +22,9 @@ export class SessionManager {
   private activeSessionId: string | null = null
   private eventEmitter = new vscode.EventEmitter<SessionEvent>()
   private disposables: vscode.Disposable[] = []
+  private pendingSessionId: string | null = null
+  private isCreatingSession: boolean = false
+  private loadSessionsDebounce: NodeJS.Timeout | null = null
 
   private constructor(
     private context: vscode.ExtensionContext
@@ -36,6 +39,130 @@ export class SessionManager {
       SessionManager.instance = new SessionManager(context)
     }
     return SessionManager.instance
+  }
+
+  createPlaceholderSession(options?: {
+    title?: string
+    agent?: string
+  }): SessionWithStatus {
+    if (this.pendingSessionId && this.activeSessionId?.startsWith("temp_")) {
+      const existingPlaceholder = this.sessions.get(this.activeSessionId)
+      if (existingPlaceholder && existingPlaceholder.messageCount === 0) {
+        console.log(`[SessionManager] Deleting existing placeholder ${this.activeSessionId} before creating new one`)
+        this.sessions.delete(this.activeSessionId)
+        this.fireEvent({
+          type: "deleted",
+          sessionId: this.activeSessionId,
+          timestamp: Date.now()
+        })
+      }
+    }
+
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
+
+    const sessionWithStatus: SessionWithStatus = {
+      id: tempId,
+      title: options?.title || "New Session",
+      agent: options?.agent || "build",
+      projectID: "",
+      directory: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
+      time: {
+        created: Date.now(),
+        updated: Date.now()
+      },
+      status: "active",
+      messageCount: 0,
+      lastActivity: Date.now()
+    }
+
+    this.sessions.set(tempId, sessionWithStatus)
+    this.activeSessionId = tempId
+    this.pendingSessionId = tempId
+
+    this.fireEvent({
+      type: "created",
+      sessionId: tempId,
+      timestamp: Date.now()
+    })
+
+    console.log(`[SessionManager] Created placeholder session: ${tempId}`)
+    return sessionWithStatus
+  }
+
+  async ensureSessionCreated(sessionId: string, options?: {
+    title?: string
+  }): Promise<string> {
+    const session = this.sessions.get(sessionId)
+    
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`)
+    }
+
+    if (!sessionId.startsWith("temp_")) {
+      return sessionId
+    }
+
+    if (this.isCreatingSession) {
+      console.log(`[SessionManager] Session creation already in progress, waiting for: ${sessionId}`)
+      return sessionId
+    }
+
+    this.isCreatingSession = true
+
+    try {
+      console.log(`[SessionManager] Converting placeholder session ${sessionId} to real session`)
+      
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+      const realSession = await this.client.createSession({
+        title: options?.title || session.title,
+        directory: workspaceFolder?.uri.fsPath
+      })
+
+      const sessionWithStatus = this.toSessionWithStatus(realSession)
+      
+      sessionWithStatus.status = session.status
+      sessionWithStatus.messageCount = session.messageCount
+      sessionWithStatus.lastActivity = session.lastActivity
+
+      this.sessions.delete(sessionId)
+      this.sessions.set(realSession.id, sessionWithStatus)
+      
+      if (this.activeSessionId === sessionId) {
+        this.activeSessionId = realSession.id
+        await this.config.set("activeSessionId", realSession.id)
+      }
+
+      if (this.pendingSessionId === sessionId) {
+        this.pendingSessionId = realSession.id
+      }
+
+      this.fireEvent({
+        type: "created",
+        sessionId: realSession.id,
+        timestamp: Date.now()
+      })
+
+      this.fireEvent({
+        type: "updated",
+        sessionId: realSession.id,
+        timestamp: Date.now()
+      })
+
+      this.fireEvent({
+        type: "deleted",
+        sessionId: sessionId,
+        timestamp: Date.now()
+      })
+
+      console.log(`[SessionManager] Real session created: ${realSession.id}`)
+      return realSession.id
+    } finally {
+      this.isCreatingSession = false
+    }
+  }
+
+  getPendingSessionId(): string | null {
+    return this.pendingSessionId
   }
 
   async createSession(options?: {
@@ -72,9 +199,34 @@ export class SessionManager {
     return sessionWithStatus
   }
 
-  async loadSessions(): Promise<void> {
+  hasPlaceholderSession(): boolean {
+    return this.pendingSessionId !== null && this.sessions.has(this.pendingSessionId || "")
+  }
+
+  async loadSessions(force: boolean = false): Promise<void> {
+    if (!force && this.loadSessionsDebounce) {
+      return
+    }
+
+    if (!force) {
+      this.loadSessionsDebounce = setTimeout(async () => {
+        this.loadSessionsDebounce = null
+        await this.doLoadSessions()
+      }, 500)
+      return
+    }
+
+    await this.doLoadSessions()
+  }
+
+  private async doLoadSessions(): Promise<void> {
     try {
+      console.log("[SessionManager] Loading sessions from API...")
       const sessionList = await this.client.listSessions()
+      
+      const placeholderId = this.pendingSessionId
+      const activeSessionBefore = this.activeSessionId
+      
       this.sessions.clear()
 
       for (const session of sessionList) {
@@ -90,10 +242,32 @@ export class SessionManager {
         this.sessions.set(session.id, sessionWithStatus)
       }
 
-      const savedActiveId = this.config.get("activeSessionId")
-      if (savedActiveId && this.sessions.has(savedActiveId)) {
-        this.activeSessionId = savedActiveId
+      if (placeholderId && !this.sessions.has(placeholderId)) {
+        this.activeSessionId = await this.config.get("activeSessionId") as string || null
+        
+        if (activeSessionBefore?.startsWith("temp_") && placeholderId === activeSessionBefore) {
+          const newestSession = this.getAllSessions()[0]
+          if (newestSession) {
+            this.activeSessionId = newestSession.id
+            this.pendingSessionId = newestSession.id
+            await this.config.set("activeSessionId", newestSession.id)
+            console.log(`[SessionManager] Auto-switched to newest session after placeholder conversion: ${newestSession.id}`)
+          }
+        }
+      } else {
+        const savedActiveId = this.config.get("activeSessionId")
+        if (savedActiveId && this.sessions.has(savedActiveId as string)) {
+          this.activeSessionId = savedActiveId as string
+        }
       }
+
+      console.log(`[SessionManager] Loaded ${this.sessions.size} sessions, active: ${this.activeSessionId}`)
+      
+      this.fireEvent({
+        type: "updated",
+        sessionId: this.activeSessionId || "",
+        timestamp: Date.now()
+      })
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to load sessions: ${error}`)
     }
@@ -105,11 +279,27 @@ export class SessionManager {
       throw new Error(`Session ${sessionId} not found`)
     }
 
+    const previousActiveId = this.activeSessionId
+
     if (this.activeSessionId) {
       const oldSession = this.sessions.get(this.activeSessionId)
-      if (oldSession && oldSession.status === "active") {
+      if (oldSession && oldSession.status === "active" && this.activeSessionId !== sessionId) {
         oldSession.status = "idle"
+        oldSession.lastActivity = Date.now()
         await this.updateSessionCache(oldSession.id)
+        
+        this.fireEvent({
+          type: "updated",
+          sessionId: this.activeSessionId,
+          timestamp: Date.now()
+        })
+        
+        console.log(`[SessionManager] Deactivated session: ${this.activeSessionId}`)
+      }
+
+      if (this.activeSessionId.startsWith("temp_") && this.activeSessionId !== sessionId) {
+        console.log(`[SessionManager] Switching away from placeholder session ${this.activeSessionId}, deleting it`)
+        this.deletePlaceholderSession(this.activeSessionId)
       }
     }
 
@@ -125,6 +315,31 @@ export class SessionManager {
       sessionId,
       timestamp: Date.now()
     })
+
+    if (previousActiveId !== sessionId) {
+      this.fireEvent({
+        type: "updated",
+        sessionId: sessionId,
+        timestamp: Date.now()
+      })
+      console.log(`[SessionManager] Activated session: ${sessionId}`)
+    }
+  }
+
+  private deletePlaceholderSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId)
+    if (session && sessionId.startsWith("temp_") && session.messageCount === 0) {
+      console.log(`[SessionManager] Deleting placeholder session: ${sessionId}`)
+      this.sessions.delete(sessionId)
+      if (this.pendingSessionId === sessionId) {
+        this.pendingSessionId = null
+      }
+      this.fireEvent({
+        type: "deleted",
+        sessionId,
+        timestamp: Date.now()
+      })
+    }
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -148,7 +363,9 @@ export class SessionManager {
 
       if (this.activeSessionId === sessionId) {
         this.activeSessionId = null
+        this.pendingSessionId = null
         await this.config.set("activeSessionId", undefined)
+        console.log(`[SessionManager] Active session deleted, clearing active status`)
       }
 
       this.fireEvent({
@@ -162,6 +379,13 @@ export class SessionManager {
       vscode.window.showErrorMessage(`Failed to delete session: ${error}`)
       throw error
     }
+  }
+
+  async handleActiveSessionDeleted(): Promise<void> {
+    console.log(`[SessionManager] Handling active session deletion`)
+    this.activeSessionId = null
+    this.pendingSessionId = null
+    await this.config.set("activeSessionId", undefined)
   }
 
   async forkSession(sessionId: string, messageId?: string): Promise<SessionWithStatus> {
@@ -255,12 +479,19 @@ export class SessionManager {
   }
 
   private toSessionWithStatus(session: SessionInfo): SessionWithStatus {
-    return {
-      ...session,
+    const sessionWithStatus: SessionWithStatus = {
+      id: session.id,
+      title: session.title,
+      agent: session.agent,
+      projectID: session.projectID,
+      directory: session.directory,
+      time: session.time,
       status: "idle",
       messageCount: 0,
-      lastActivity: session.time.updated
+      lastActivity: session.time?.updated || Date.now()
     }
+    console.log(`[SessionManager] toSessionWithStatus: ${session.id} - ${session.title}`)
+    return sessionWithStatus
   }
 
   private async updateSessionCache(sessionId: string): Promise<void> {
