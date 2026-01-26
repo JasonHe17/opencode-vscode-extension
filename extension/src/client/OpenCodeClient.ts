@@ -319,6 +319,17 @@ export class OpenCodeClient {
     }
   }
 
+  async checkServerAvailable(): Promise<boolean> {
+    try {
+      const response = await this.sdk.global.health()
+      console.log("[OpenCodeClient] Server is available")
+      return true
+    } catch (error) {
+      console.error("[OpenCodeClient] Server not available:", error)
+      return false
+    }
+  }
+
   async getServerStatus(): Promise<{
     version: string
     agents: string[]
@@ -327,10 +338,9 @@ export class OpenCodeClient {
   }> {
     console.log("[OpenCodeClient] Getting server status")
     try {
-      // Try the SDK's health endpoint first
-      const response = await this.sdk.global.health()
-      console.log("[OpenCodeClient] Health response:", response)
-      const data = (response as any).data
+      const healthResponse = await this.sdk.global.health()
+      console.log("[OpenCodeClient] Health response:", healthResponse)
+      const data = (healthResponse as any).data
       
       const result = {
         version: data?.version || "unknown",
@@ -343,57 +353,45 @@ export class OpenCodeClient {
     } catch (error) {
       console.error("[OpenCodeClient] SDK health endpoint failed:", error)
       
-      // Fallback: Try creating a session to verify server is working
-      console.log("[OpenCodeClient] Trying fallback session creation test...")
-      try {
-        const testSession = await this.sdk.session.create({
-          title: "__test_connection__"
-        })
-        console.log("[OpenCodeClient] Server is responding (session created)")
-        
-        // Clean up test session
-        const sessionId = testSession.data?.[0]?.id
-        if (sessionId) {
-          try {
-            await this.sdk.session.delete({ sessionID: sessionId })
-          } catch (e) {
-            console.warn("[OpenCodeClient] Could not delete test session:", e)
-          }
-        }
-        
-        // Return default models list since server is working but doesn't have the health endpoint
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage.includes('fetch failed') || errorMessage.includes('ECONNREFUSED')) {
         return {
           version: "unknown",
-          agents: ["build", "test", "optimize", "explain"],
+          agents: [],
           providers: [],
           models: []
         }
-      } catch (fallbackError) {
-        console.error("[OpenCodeClient] Fallback also failed:", fallbackError)
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        this.handleError(error, "Failed to connect to OpenCode server")
-        throw new Error(`Failed to connect to OpenCode server: ${errorMessage}`)
       }
+      
+      throw new Error(`Failed to connect to OpenCode server: ${errorMessage}`)
     }
   }
 
   async getModels(): Promise<Array<{ providerID: string; models: string[] }>> {
     console.log("[OpenCodeClient] Getting models")
     try {
-      console.log("[OpenCodeClient] SDK config accessor:", typeof this.sdk.config)
       const response = await this.sdk.config.providers({ directory: this.directory })
-      console.log("[OpenCodeClient] Providers response:", JSON.stringify(response, null, 2))
+      console.log("[OpenCodeClient] Providers response:", response)
 
-      const data = (response as any).data || (response as any).body || response
-      console.log("[OpenCodeClient] Parsed data:", data)
-
-      const providers: any[] = data?.providers || []
+      let providers: any[] = []
+      
+      if (Array.isArray(response)) {
+        providers = response
+      } else if ((response as any).data && Array.isArray((response as any).data)) {
+        providers = (response as any).data
+      } else if ((response as any).data && Array.isArray((response as any).data.providers)) {
+        providers = (response as any).data.providers
+      } else if ((response as any).providers && Array.isArray((response as any).providers)) {
+        providers = (response as any).providers
+      }
+      
       console.log("[OpenCodeClient] Providers count:", providers.length)
 
       const models = providers
         .filter((p: any) => p.models && Object.keys(p.models).length > 0)
         .map((p: any) => ({
-          providerID: p.id || p.name,
+          providerID: p.id || p.name || "unknown",
           models: Object.keys(p.models)
         }))
 
@@ -401,12 +399,8 @@ export class OpenCodeClient {
       return models
     } catch (error) {
       console.error("[OpenCodeClient] Failed to load models:", error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      vscode.window.showErrorMessage(
-        `Failed to load models from OpenCode server: ${errorMessage}. ` +
-        "Please ensure the server is running."
-      )
-      throw error
+      const models: Array<{ providerID: string; models: string[] }> = []
+      return models
     }
   }
 

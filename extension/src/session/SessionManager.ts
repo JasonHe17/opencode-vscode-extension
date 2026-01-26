@@ -222,7 +222,12 @@ export class SessionManager {
   private async doLoadSessions(): Promise<void> {
     try {
       console.log("[SessionManager] Loading sessions from API...")
-      const sessionList = await this.client.listSessions()
+      let sessionList: SessionInfo[] = []
+      try {
+        sessionList = await this.client.listSessions()
+      } catch (e) {
+        console.error("[SessionManager] Failed to list sessions from client:", e)
+      }
       
       const placeholderId = this.pendingSessionId
       const activeSessionBefore = this.activeSessionId

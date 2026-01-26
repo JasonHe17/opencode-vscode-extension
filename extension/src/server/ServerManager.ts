@@ -60,10 +60,13 @@ export class ServerManager {
     
     for (let i = 0; i < attempts; i++) {
       try {
+        const controller = new AbortController()
+        const abortTimeoutId = setTimeout(() => controller.abort(), 2000)
         const response = await fetch(`${url}/`, {
           method: "GET",
-          signal: AbortSignal.timeout(2000)
+          signal: controller.signal
         })
+        clearTimeout(abortTimeoutId)
         
         if (response.ok) {
           try {
@@ -86,7 +89,7 @@ export class ServerManager {
             }
           }
         }
-      } catch (error) {
+      } catch {
         if (i < attempts - 1) {
           await this.delay(300)
         }
@@ -180,6 +183,7 @@ export class ServerManager {
         autoStarted: true
       }
 
+      let startTimeoutId: NodeJS.Timeout | null = null
       const checkCommand = process.platform === "win32" ? "opencode.cmd" : "opencode"
       
       execAsync(`${checkCommand} --version`)
@@ -223,7 +227,7 @@ export class ServerManager {
             })
           }
 
-          const timeoutId = setTimeout(() => {
+          const exitTimeoutId = setTimeout(() => {
             if (!status.running) {
               this.log("Server start timed out")
               vscode.window.showWarningMessage(
@@ -233,9 +237,10 @@ export class ServerManager {
               resolve({ ...status, running: false })
             }
           }, 15000)
+          startTimeoutId = exitTimeoutId
 
           this.serverProcess.on("exit", (code: number) => {
-            clearTimeout(timeoutId)
+            if (startTimeoutId) clearTimeout(startTimeoutId)
             if (code !== 0 && !status.running) {
               this.log(`Server process exited unexpectedly with code ${code}`)
               resolve({ ...status, running: false })
@@ -243,7 +248,7 @@ export class ServerManager {
           })
 
           this.serverProcess.on("error", (err: Error) => {
-            clearTimeout(timeoutId)
+            if (startTimeoutId) clearTimeout(startTimeoutId)
             this.log(`Server error: ${err.message}`)
             
             if (err.message.includes("ENOENT") || err.message.includes("not found")) {

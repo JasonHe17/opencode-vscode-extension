@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { readFileSync } from "fs"
 import { OpenCodeClient } from "../client/OpenCodeClient.js"
 import { getSettingsManager } from "../config/SettingsManager.js"
 
@@ -62,8 +63,7 @@ export class SettingsPanel {
     const htmlPath = vscode.Uri.joinPath(extensionUri, "webviews", "settings", "index.html")
     const jsPath = vscode.Uri.joinPath(extensionUri, "webviews", "settings", "main.js")
     
-    let html = htmlPath.fsPath
-    const fileContent = require("fs").readFileSync(html, "utf8")
+    const fileContent = readFileSync(htmlPath.fsPath, "utf8")
     
     let htmlContent = fileContent.replace(
       /<script src="main.js"><\/script>/,

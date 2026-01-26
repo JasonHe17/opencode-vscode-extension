@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { readFileSync } from "fs"
 import { SessionManager } from "../session/SessionManager.js"
 import { PermissionDialog } from "./PermissionDialog.js"
 import { OpenCodeClient } from "../client/OpenCodeClient.js"
@@ -225,7 +226,6 @@ export class ChatPanel {
 
     this.setupWebview(webviewView, extensionUri)
     
-    // Auto-init when sidebar is resolved
     setTimeout(() => {
       this.handleInit();
     }, 500);
@@ -240,8 +240,7 @@ export class ChatPanel {
     const cssPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "styles.css")
     const jsPath = vscode.Uri.joinPath(extensionUri, "webviews", "chat", "main.js")
     
-    let html = htmlPath.fsPath
-    const fileContent = require("fs").readFileSync(html, "utf8")
+    const fileContent = readFileSync(htmlPath.fsPath, "utf8")
     
     let htmlContent = fileContent
       .replace(
@@ -308,37 +307,51 @@ export class ChatPanel {
   private async handleInit(): Promise<void> {
     try {
       console.log("[ChatPanel] Initializing and loading models from server...")
-      const status = await this.client.getServerStatus()
-      const models = await this.client.getModels()
       
-      // Update ProviderSelector cache
-      await getProviderSelector().loadProvidersFromServer()
+      const status = await this.client.getServerStatus().catch((error) => {
+        console.error("[ChatPanel] Failed to get server status:", error)
+        return {
+          version: "unknown",
+          agents: [],
+          providers: [],
+          models: []
+        }
+      })
+      
+      const models = await this.client.getModels().catch((error) => {
+        console.error("[ChatPanel] Failed to get models:", error)
+        return []
+      })
       
       console.log("[ChatPanel] Models loaded:", JSON.stringify(models))
       
       const agents = (status.agents && status.agents.length > 0) 
         ? status.agents 
-        : getAgentSelector().getAgentList().map(a => a.id);
+        : getAgentSelector().getAgentList().map(a => a.id)
       
       const response = {
         type: "serverStatus",
         agents: agents,
-        models: models
-      };
-      console.log("[ChatPanel] Posting to webview:", JSON.stringify(response));
+        models: models,
+        serverConnected: status.agents.length > 0 || models.length > 0
+      }
+      console.log("[ChatPanel] Posting to webview:", JSON.stringify(response))
       this.postMessageToWebview(response)
 
-      // If we have a current session, send its history after status
+      if (models.length > 0) {
+        await getProviderSelector().loadProvidersFromServer()
+      }
+
       if (this.currentSessionId) {
         await this.switchSession(this.currentSessionId)
       }
     } catch (error) {
       console.error("[ChatPanel] Failed to handle init:", error)
-      // Fallback with minimal info if server is starting
       this.postMessageToWebview({
         type: "serverStatus",
         agents: getAgentSelector().getAgentList().map(a => a.id),
-        models: []
+        models: [],
+        serverConnected: false
       })
     }
   }
@@ -379,19 +392,18 @@ export class ChatPanel {
         }
       ]
 
-      // Extract file references from text and add as file parts
-      const mentionRegex = /@([a-zA-Z0-9\._\-\/]+)(?:#L(\d+)(?:-(\d+))?)?/g
+      const mentionRegex = /@([a-zA-Z0-9._\-/]+)(?:#L(\d+)(?:-(\d+))?)?/g
       let match
       while ((match = mentionRegex.exec(text)) !== null) {
-        const [_, path, start, end] = match
+        const [_, path] = match
         const uri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders?.[0].uri || vscode.Uri.file("/"), path)
         parts.push({
           id: Math.random().toString(36).substring(7),
           type: "file",
-          url: uri.toString(),
+          uri: uri.toString(),
           filename: path,
-          mime: "text/plain" // Default to text/plain for mentions
-        })
+          mime: "text/plain"
+        } as any)
       }
 
       this.client.startPolling(1000)
@@ -437,7 +449,6 @@ export class ChatPanel {
   }
 
   private async handleFileSuggestions(searchTerm: string): Promise<void> {
-    // Search in both open documents and workspace files
     const openFiles = vscode.workspace.textDocuments.map(doc => ({
       path: vscode.workspace.asRelativePath(doc.uri),
       uri: doc.uri.toString()
@@ -451,7 +462,6 @@ export class ChatPanel {
         uri: uri.toString()
       }))
       
-      // Merge and deduplicate
       const seen = new Set(openFiles.map(f => f.path))
       foundFiles.forEach(f => {
         if (!seen.has(f.path)) {
