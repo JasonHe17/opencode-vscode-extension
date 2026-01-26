@@ -553,15 +553,30 @@ function showFileSuggestions(suggestions: any[]): void {
 
   suggestions.forEach((suggestion) => {
     const div = document.createElement("div")
-    div.className = "file-suggestion"
+    div.className = "suggestion-item"
     div.innerHTML = `
-      <span class="file-suggestion-icon">📄</span>
-      <span class="file-suggestion-path">${escapeHtml(suggestion.path)}</span>
-      ${suggestion.lineRange ? `<span class="file-suggestion-range">${suggestion.lineRange}</span>` : ""}
+      <span class="suggestion-icon">📄</span>
+      <span class="suggestion-path">${escapeHtml(suggestion.path)}</span>
+      ${suggestion.lineRange ? `<span class="suggestion-range">${suggestion.lineRange}</span>` : ""}
     `
     div.addEventListener("click", () => {
-      insertText(`@${suggestion.path}${suggestion.lineRange || ""} `)
+      const text = messageInput.value
+      const cursorPos = messageInput.selectionStart
+      const beforeCursor = text.substring(0, cursorPos)
+      const afterCursor = text.substring(cursorPos)
+      const mentionMatch = beforeCursor.match(/@([^\s]*)$/)
+      
+      if (mentionMatch) {
+        const beforeMention = beforeCursor.substring(0, mentionMatch.index)
+        const insertText = `@${suggestion.path}${suggestion.lineRange || ""} `
+        messageInput.value = beforeMention + insertText + afterCursor
+        messageInput.selectionStart = messageInput.selectionEnd = beforeMention.length + insertText.length
+      } else {
+        insertText(`@${suggestion.path}${suggestion.lineRange || ""} `)
+      }
+      
       fileSuggestions.hidden = true
+      messageInput.focus()
     })
     fileSuggestions.appendChild(div)
   })

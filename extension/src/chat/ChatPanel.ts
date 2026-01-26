@@ -379,6 +379,21 @@ export class ChatPanel {
         }
       ]
 
+      // Extract file references from text and add as file parts
+      const mentionRegex = /@([a-zA-Z0-9\._\-\/]+)(?:#L(\d+)(?:-(\d+))?)?/g
+      let match
+      while ((match = mentionRegex.exec(text)) !== null) {
+        const [_, path, start, end] = match
+        const uri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders?.[0].uri || vscode.Uri.file("/"), path)
+        parts.push({
+          id: Math.random().toString(36).substring(7),
+          type: "file",
+          url: uri.toString(),
+          filename: path,
+          mime: "text/plain" // Default to text/plain for mentions
+        })
+      }
+
       this.client.startPolling(1000)
 
       await this.sessionManager.ensureSessionCreated(targetSessionId, {
@@ -413,38 +428,45 @@ export class ChatPanel {
     })
 
     if (fileUri && fileUri[0]) {
-      const filePath = fileUri[0].fsPath
+      const relativePath = vscode.workspace.asRelativePath(fileUri[0])
       this.postMessageToWebview({
-        type: "message",
-        sessionId: this.currentSessionId,
-        id: `attachment-${Date.now()}`,
-        role: "user",
-        parts: [
-          {
-            type: "text",
-            content: `Attached: ${filePath}`
-          }
-        ]
+        type: "insertText",
+        text: `@${relativePath} `
       })
     }
   }
 
   private async handleFileSuggestions(searchTerm: string): Promise<void> {
-    const files = vscode.workspace.textDocuments.map(doc => {
-      const relativePath = vscode.workspace.asRelativePath(doc.uri)
-      return {
-        path: relativePath,
-        absolutePath: doc.uri.fsPath
-      }
-    })
+    // Search in both open documents and workspace files
+    const openFiles = vscode.workspace.textDocuments.map(doc => ({
+      path: vscode.workspace.asRelativePath(doc.uri),
+      uri: doc.uri.toString()
+    }))
+
+    let files = openFiles
+    if (searchTerm) {
+      const workspaceFiles = await vscode.workspace.findFiles(`**/*${searchTerm}*`, "**/node_modules/**", 10)
+      const foundFiles = workspaceFiles.map(uri => ({
+        path: vscode.workspace.asRelativePath(uri),
+        uri: uri.toString()
+      }))
+      
+      // Merge and deduplicate
+      const seen = new Set(openFiles.map(f => f.path))
+      foundFiles.forEach(f => {
+        if (!seen.has(f.path)) {
+          files.push(f)
+        }
+      })
+    }
 
     const filteredFiles = searchTerm
-      ? files.filter(f => f.path.toLowerCase().includes(searchTerm.toLowerCase()))
+      ? files.filter(f => f.path.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 10)
       : files.slice(0, 10)
 
     this.postMessageToWebview({
       type: "fileSuggestions",
-      files: filteredFiles,
+      suggestions: filteredFiles,
       sessionId: this.currentSessionId
     })
   }
