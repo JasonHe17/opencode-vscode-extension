@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
-import { createSession, setActiveSession as setSessionActive, deleteSession, forkSession, showSession } from "./sessionCommands"
-import { openChat, sendMessage, attachFile, explainSelection, refactorSelection, generateTests } from "./chatCommands"
-import { openSettings, selectAgent, selectModel, setApiKey } from "./configCommands"
+import { createSession, setActiveSession as setSessionActive, deleteSession, forkSession, showSession } from "./sessionCommands.js"
+import { openChat, sendMessage, attachFile, explainSelection, refactorSelection, generateTests } from "./chatCommands.js"
+import { openSettings, selectAgent, selectModel, setApiKey } from "./configCommands.js"
 
 export function registerAllCommands(context: vscode.ExtensionContext): void {
   registerSessionCommands(context)

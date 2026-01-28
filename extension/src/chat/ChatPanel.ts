@@ -395,7 +395,7 @@ export class ChatPanel {
       const mentionRegex = /@([a-zA-Z0-9._\-/]+)(?:#L(\d+)(?:-(\d+))?)?/g
       let match
       while ((match = mentionRegex.exec(text)) !== null) {
-        const [_, path] = match
+        const [, path] = match
         const uri = vscode.Uri.joinPath(vscode.workspace.workspaceFolders?.[0].uri || vscode.Uri.file("/"), path)
         parts.push({
           id: Math.random().toString(36).substring(7),

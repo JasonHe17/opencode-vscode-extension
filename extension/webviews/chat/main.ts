@@ -7,7 +7,7 @@ function resetState(): void {
 }
 
 const messagesContainer = document.getElementById("messages")!
-const messageInput = document.getElementById("messageInput") as HTMLTextAreaElement
+const messageInput = document.getElementById("messageInput") as HTMLDivElement
 const sendButton = document.getElementById("sendButton") as HTMLButtonElement
 const attachButton = document.getElementById("attachButton") as HTMLButtonElement
 const fileSuggestions = document.getElementById("fileSuggestions")!
@@ -17,6 +17,9 @@ const modelSelect = document.getElementById("modelSelect") as HTMLSelectElement
 let messages: any[] = []
 let currentSessionId: string | null = null
 let currentSessionTitle: string | null = null
+
+// Track current mention state for file suggestions
+let currentMention: { startOffset: number; searchTerm: string; textBefore: string; savedRange: Range } | null = null
 
 agentSelect.addEventListener("change", () => {
   postMessage({
@@ -442,7 +445,7 @@ window.addEventListener("message", (event) => {
       
       if (currentSessionId) {
         console.log("[init] Focusing input for session:", currentSessionId)
-        messageInput.value = ""
+        messageInput.innerHTML = ""
         messageInput.focus()
       }
       break
@@ -492,6 +495,7 @@ window.addEventListener("message", (event) => {
 
     case "clearSuggestions":
       fileSuggestions.hidden = true
+      currentMention = null
       break
 
     case "serverStatus":
@@ -560,22 +564,9 @@ function showFileSuggestions(suggestions: any[]): void {
       ${suggestion.lineRange ? `<span class="suggestion-range">${suggestion.lineRange}</span>` : ""}
     `
     div.addEventListener("click", () => {
-      const text = messageInput.value
-      const cursorPos = messageInput.selectionStart
-      const beforeCursor = text.substring(0, cursorPos)
-      const afterCursor = text.substring(cursorPos)
-      const mentionMatch = beforeCursor.match(/@([^\s]*)$/)
-      
-      if (mentionMatch) {
-        const beforeMention = beforeCursor.substring(0, mentionMatch.index)
-        const insertText = `@${suggestion.path}${suggestion.lineRange || ""} `
-        messageInput.value = beforeMention + insertText + afterCursor
-        messageInput.selectionStart = messageInput.selectionEnd = beforeMention.length + insertText.length
-      } else {
-        insertText(`@${suggestion.path}${suggestion.lineRange || ""} `)
-      }
-      
+      insertFileMention(suggestion.path, suggestion.lineRange)
       fileSuggestions.hidden = true
+      currentMention = null
       messageInput.focus()
     })
     fileSuggestions.appendChild(div)
@@ -584,15 +575,287 @@ function showFileSuggestions(suggestions: any[]): void {
   fileSuggestions.hidden = false
 }
 
-function insertText(text: string): void {
-  const start = messageInput.selectionStart
-  const end = messageInput.selectionEnd
-  const before = messageInput.value.substring(0, start)
-  const after = messageInput.value.substring(end)
-
-  messageInput.value = before + text + after
-  messageInput.selectionStart = messageInput.selectionEnd = start + text.length
+function insertFileMention(path: string, lineRange?: string): void {
+  // Use the saved range from currentMention if available
+  // This is crucial because when clicking on a suggestion, the focus/selection changes
+  let range: Range | null = null
+  
+  if (currentMention?.savedRange) {
+    // Clone the saved range to avoid modifying the original
+    range = currentMention.savedRange.cloneRange()
+  } else {
+    // Fallback to current selection
+    const selection = window.getSelection()
+    if (!selection || !selection.rangeCount) return
+    range = selection.getRangeAt(0)
+  }
+  
+  if (!range) return
+  
+  // Restore focus to messageInput first
   messageInput.focus()
+  
+  // Delete the @searchTerm text before inserting
+  // Use the saved startOffset from currentMention
+  if (currentMention) {
+    const deleteRange = document.createRange()
+    
+    // Find the text node containing the @ symbol using the saved startOffset
+    let currentOffset = 0
+    let startNode: Text | null = null
+    let startOffsetInNode = 0
+    
+    const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false)
+    let textNode: Text | null = null
+    
+    while (textNode = walker.nextNode() as Text) {
+      const nodeLength = textNode.textContent?.length || 0
+      if (currentOffset <= currentMention.startOffset && currentMention.startOffset < currentOffset + nodeLength) {
+        startNode = textNode
+        startOffsetInNode = currentMention.startOffset - currentOffset
+        break
+      }
+      currentOffset += nodeLength
+    }
+    
+    if (startNode) {
+      deleteRange.setStart(startNode, startOffsetInNode)
+      deleteRange.setEnd(range.endContainer, range.endOffset)
+      deleteRange.deleteContents()
+    }
+  }
+
+  // Create the file mention element
+  const mentionSpan = document.createElement("span")
+  mentionSpan.className = "file-mention"
+  mentionSpan.setAttribute("data-path", path)
+  mentionSpan.setAttribute("contenteditable", "false")
+  mentionSpan.setAttribute("tabindex", "-1")
+  
+  const pathText = document.createTextNode(`@${path}`)
+  mentionSpan.appendChild(pathText)
+  
+  if (lineRange) {
+    const rangeSpan = document.createElement("span")
+    rangeSpan.className = "line-range"
+    rangeSpan.textContent = lineRange
+    mentionSpan.appendChild(rangeSpan)
+  }
+
+  // Get the current selection after deletion and focus restoration
+  const newSelection = window.getSelection()
+  if (newSelection && newSelection.rangeCount > 0) {
+    const newRange = newSelection.getRangeAt(0)
+    
+    // Insert the mention
+    newRange.insertNode(mentionSpan)
+    
+    // Move cursor after the mention and add a space
+    newRange.setStartAfter(mentionSpan)
+    newRange.setEndAfter(mentionSpan)
+    
+    // Add a space after the mention
+    const spaceNode = document.createTextNode(" ")
+    newRange.insertNode(spaceNode)
+    
+    // Move cursor after the space
+    newRange.setStartAfter(spaceNode)
+    newRange.setEndAfter(spaceNode)
+    
+    newSelection.removeAllRanges()
+    newSelection.addRange(newRange)
+  }
+  
+  // Add click handler to select the entire mention
+  mentionSpan.addEventListener("click", (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    selectMention(mentionSpan)
+  })
+}
+
+function getOffsetOfNode(node: Node): number {
+  let offset = 0
+  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false)
+  let currentNode: Text | null = null
+  while (currentNode = walker.nextNode() as Text) {
+    if (currentNode === node) {
+      return offset
+    }
+    offset += currentNode.textContent?.length || 0
+  }
+  return offset
+}
+
+function getCursorPosition(): number {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount) return 0
+  
+  const range = selection.getRangeAt(0)
+  let position = 0
+  
+  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false)
+  let textNode: Text | null = null
+  while (textNode = walker.nextNode() as Text) {
+    if (textNode === range.startContainer) {
+      return position + range.startOffset
+    }
+    position += textNode.textContent?.length || 0
+  }
+  return position
+}
+
+function selectMention(mentionSpan: HTMLElement): void {
+  const selection = window.getSelection()
+  if (!selection) return
+  
+  const range = document.createRange()
+  range.selectNode(mentionSpan)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  
+  // Add visual selection class
+  mentionSpan.classList.add("selected")
+  
+  // Remove selection class when clicking elsewhere
+  const removeSelection = (e: Event) => {
+    if (!mentionSpan.contains(e.target as Node)) {
+      mentionSpan.classList.remove("selected")
+      document.removeEventListener("click", removeSelection)
+    }
+  }
+  
+  setTimeout(() => {
+    document.addEventListener("click", removeSelection)
+  }, 0)
+}
+
+// Add global double-click handler for file mentions
+messageInput.addEventListener("dblclick", (e) => {
+  const target = e.target as HTMLElement
+  const mentionElement = findMentionElement(target)
+  if (mentionElement) {
+    e.preventDefault()
+    e.stopPropagation()
+    selectMention(mentionElement)
+  }
+})
+
+function getTextNodeAtOffset(root: Node, offset: number): Text | null {
+  let currentOffset = 0
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false)
+  
+  let textNode: Text | null = null
+  while (textNode = walker.nextNode() as Text) {
+    const nodeLength = textNode.textContent?.length || 0
+    if (currentOffset + nodeLength >= offset) {
+      return textNode
+    }
+    currentOffset += nodeLength
+  }
+  
+  return null
+}
+
+function insertText(text: string): void {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount) {
+    // Check if the text is a file mention (starts with @ and looks like a path)
+    const fileMentionMatch = text.match(/^@([^\s]+)(\s*)$/)
+    if (fileMentionMatch) {
+      const path = fileMentionMatch[1]
+      const trailingSpace = fileMentionMatch[2]
+      insertFileMentionAtEnd(path)
+      if (trailingSpace) {
+        messageInput.appendChild(document.createTextNode(trailingSpace))
+      }
+    } else {
+      messageInput.innerHTML += escapeHtml(text)
+    }
+    return
+  }
+
+  const range = selection.getRangeAt(0)
+  
+  // Check if the text is a file mention (starts with @ and looks like a path)
+  const fileMentionMatch = text.match(/^@([^\s]+)(\s*)$/)
+  if (fileMentionMatch) {
+    const path = fileMentionMatch[1]
+    const trailingSpace = fileMentionMatch[2]
+    
+    // Create the file mention element
+    const mentionSpan = document.createElement("span")
+    mentionSpan.className = "file-mention"
+    mentionSpan.setAttribute("data-path", path)
+    mentionSpan.setAttribute("contenteditable", "false")
+    mentionSpan.setAttribute("tabindex", "-1")
+    
+    const pathText = document.createTextNode(`@${path}`)
+    mentionSpan.appendChild(pathText)
+    
+    // Insert the mention
+    range.insertNode(mentionSpan)
+    
+    // Move cursor after the mention
+    range.setStartAfter(mentionSpan)
+    range.setEndAfter(mentionSpan)
+    
+    // Add trailing space if present
+    if (trailingSpace) {
+      const spaceNode = document.createTextNode(trailingSpace)
+      range.insertNode(spaceNode)
+      range.setStartAfter(spaceNode)
+      range.setEndAfter(spaceNode)
+    }
+    
+    selection.removeAllRanges()
+    selection.addRange(range)
+    
+    // Add click handler to select the entire mention
+    mentionSpan.addEventListener("click", (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      selectMention(mentionSpan)
+    })
+  } else {
+    // Regular text insertion
+    const textNode = document.createTextNode(text)
+    range.insertNode(textNode)
+    
+    range.setStartAfter(textNode)
+    range.setEndAfter(textNode)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+}
+
+function insertFileMentionAtEnd(path: string, lineRange?: string): void {
+  // Create the file mention element
+  const mentionSpan = document.createElement("span")
+  mentionSpan.className = "file-mention"
+  mentionSpan.setAttribute("data-path", path)
+  mentionSpan.setAttribute("contenteditable", "false")
+  mentionSpan.setAttribute("tabindex", "-1")
+  
+  const pathText = document.createTextNode(`@${path}`)
+  mentionSpan.appendChild(pathText)
+  
+  if (lineRange) {
+    const rangeSpan = document.createElement("span")
+    rangeSpan.className = "line-range"
+    rangeSpan.textContent = lineRange
+    mentionSpan.appendChild(rangeSpan)
+  }
+  
+  // Append to messageInput
+  messageInput.appendChild(mentionSpan)
+  
+  // Add click handler to select the entire mention
+  mentionSpan.addEventListener("click", (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    selectMention(mentionSpan)
+  })
 }
 
 sendButton.addEventListener("click", sendMessage)
@@ -601,15 +864,123 @@ attachButton.addEventListener("click", () => {
     type: "attachFile"
   })
 })
+
 messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
+    return
+  }
+  
+  // Handle Backspace and Delete for file mentions
+  if (e.key === "Backspace") {
+    handleBackspace(e)
+  } else if (e.key === "Delete") {
+    handleDelete(e)
   }
 })
 
+function handleBackspace(e: KeyboardEvent): void {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount) return
+  
+  const range = selection.getRangeAt(0)
+  
+  // First check if there's a selected mention (not collapsed selection)
+  if (!range.collapsed) {
+    // Check if the selection contains or is within a file mention
+    const container = range.commonAncestorContainer
+    const mentionElement = findMentionElement(container)
+    if (mentionElement) {
+      e.preventDefault()
+      mentionElement.remove()
+      return
+    }
+    return
+  }
+  
+  // Check if cursor is immediately after a file mention
+  let nodeBefore = range.startContainer.previousSibling
+  
+  // If we're at the start of a text node, check the previous sibling
+  if (range.startOffset === 0 && range.startContainer !== messageInput) {
+    nodeBefore = range.startContainer.previousSibling
+  }
+  
+  // Check if the previous sibling is a file mention
+  if (nodeBefore && (nodeBefore as HTMLElement).classList?.contains("file-mention")) {
+    e.preventDefault()
+    nodeBefore.remove()
+    return
+  }
+  
+  // Check if we're inside a file mention (shouldn't happen with contenteditable="false", but just in case)
+  const parent = range.startContainer.parentElement
+  if (parent && parent.classList?.contains("file-mention")) {
+    e.preventDefault()
+    parent.remove()
+  }
+}
+
+function handleDelete(e: KeyboardEvent): void {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount) return
+  
+  const range = selection.getRangeAt(0)
+  
+  // First check if there's a selected mention (not collapsed selection)
+  if (!range.collapsed) {
+    // Check if the selection contains or is within a file mention
+    const container = range.commonAncestorContainer
+    const mentionElement = findMentionElement(container)
+    if (mentionElement) {
+      e.preventDefault()
+      mentionElement.remove()
+      return
+    }
+    return
+  }
+  
+  // Check if cursor is immediately before a file mention
+  let nodeAfter = range.startContainer.nextSibling
+  
+  // If we're at the end of a text node, check the next sibling
+  const textLength = range.startContainer.textContent?.length || 0
+  if (range.startOffset >= textLength && range.startContainer !== messageInput) {
+    nodeAfter = range.startContainer.nextSibling
+  }
+  
+  // Check if the next sibling is a file mention
+  if (nodeAfter && (nodeAfter as HTMLElement).classList?.contains("file-mention")) {
+    e.preventDefault()
+    nodeAfter.remove()
+    return
+  }
+  
+  // Check if we're inside a file mention (shouldn't happen with contenteditable="false", but just in case)
+  const parent = range.startContainer.parentElement
+  if (parent && parent.classList?.contains("file-mention")) {
+    e.preventDefault()
+    parent.remove()
+  }
+}
+
+function findMentionElement(node: Node): HTMLElement | null {
+  let current: Node | null = node
+  while (current && current !== messageInput) {
+    if (current.nodeType === Node.ELEMENT_NODE) {
+      const el = current as HTMLElement
+      if (el.classList?.contains("file-mention")) {
+        return el
+      }
+    }
+    current = current.parentNode
+  }
+  return null
+}
+
 function sendMessage(): void {
-  const text = messageInput.value.trim()
+  const text = getMessageText().trim()
   if (!text) return
 
   postMessage({
@@ -617,32 +988,92 @@ function sendMessage(): void {
     text
   })
 
-  messageInput.value = ""
+  messageInput.innerHTML = ""
   sendButton.disabled = true
   setTimeout(() => {
     sendButton.disabled = false
   }, 500)
 }
 
-messageInput.addEventListener("input", (e) => {
-  const text = (e.target as HTMLTextAreaElement).value
-  const cursorPos = messageInput.selectionStart
-  const beforeCursor = text.substring(0, cursorPos)
-  const mentionMatch = beforeCursor.match(/@([^\s]*)$/)
+function getMessageText(): string {
+  let text = ""
+  
+  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false)
+  
+  let node: Node | null = null
+  while (node = walker.nextNode()) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement
+      if (el.classList.contains("file-mention")) {
+        const path = el.getAttribute("data-path")
+        const lineRange = el.querySelector(".line-range")?.textContent || ""
+        if (path) {
+          text += `@${path}${lineRange}`
+        }
+      } else if (el.tagName === "BR") {
+        text += "\n"
+      } else if (el.tagName === "DIV") {
+        // Handle div elements (new lines in contenteditable)
+        if (text && !text.endsWith("\n")) {
+          text += "\n"
+        }
+      }
+    }
+  }
+  
+  return text
+}
 
+messageInput.addEventListener("input", (e) => {
+  const selection = window.getSelection()
+  if (!selection || !selection.rangeCount) {
+    fileSuggestions.hidden = true
+    currentMention = null
+    return
+  }
+  
+  const range = selection.getRangeAt(0)
+  const textContent = messageInput.textContent || ""
+  
+  // Get the text before the cursor
+  let textBeforeCursor = ""
+  const preRange = document.createRange()
+  preRange.setStart(messageInput, 0)
+  preRange.setEnd(range.endContainer, range.endOffset)
+  textBeforeCursor = preRange.toString()
+  
+  // Check for mention pattern
+  const mentionMatch = textBeforeCursor.match(/@([^\s]*)$/)
+  
   if (mentionMatch) {
     const searchTerm = mentionMatch[1]
+    const startOffset = textBeforeCursor.length - mentionMatch[0].length
+    
+    // Save the current range for later use when inserting
+    const savedRange = range.cloneRange()
+    
+    currentMention = {
+      startOffset,
+      searchTerm,
+      textBefore: textBeforeCursor.substring(0, startOffset),
+      savedRange
+    }
+    
     postMessage({
       type: "requestFileSuggestions",
       searchTerm
     })
   } else {
     fileSuggestions.hidden = true
+    currentMention = null
   }
 })
 
 document.addEventListener("click", (e) => {
   if (!fileSuggestions.contains(e.target as Node)) {
     fileSuggestions.hidden = true
+    currentMention = null
   }
 })

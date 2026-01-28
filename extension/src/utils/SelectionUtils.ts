@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { UriUtils } from "./UriUtils"
+import { UriUtils } from "./UriUtils.js"
 
 export interface FileMention {
   text: string

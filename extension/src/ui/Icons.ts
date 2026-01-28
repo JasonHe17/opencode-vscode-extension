@@ -1,18 +1,22 @@
 import * as vscode from "vscode"
-import { fileURLToPath } from "url"
-import { dirname, join } from "path"
+import { join } from "path"
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+function getExtensionPath(): string {
+  const extension = vscode.extensions.getExtension('opencode-ai.opencode-gui')
+  return extension?.extensionPath || ''
+}
 
 export class Icons {
-  static readonly logo = {
-    light: vscode.Uri.file(
-      join(__dirname, "../../images/logo-dark.svg")
-    ),
-    dark: vscode.Uri.file(
-      join(__dirname, "../../images/logo-light.svg")
-    )
+  static getLogo(): { light: vscode.Uri; dark: vscode.Uri } {
+    const extensionPath = getExtensionPath()
+    return {
+      light: vscode.Uri.file(
+        join(extensionPath, "images", "logo-dark.svg")
+      ),
+      dark: vscode.Uri.file(
+        join(extensionPath, "images", "logo-light.svg")
+      )
+    }
   }
 
   static session = {

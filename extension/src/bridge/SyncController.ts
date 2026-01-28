@@ -1,5 +1,4 @@
-import { AppEvent, AppState } from "../domain/state.js"
-import { Message, Session } from "../domain/models.js"
+import { AppState } from "../domain/state.js"
 
 export class SyncController {
   constructor(private webview: any, private store: any) {

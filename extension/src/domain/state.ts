@@ -23,17 +23,19 @@ export function appReducer(state: AppState, event: AppEvent): AppState {
       return { ...state }
     case "SESSION_SWITCHED":
       return { ...state, activeSessionId: event.sessionId }
-    case "MESSAGE_ADDED":
+    case "MESSAGE_ADDED": {
       const msgs = state.messages.get(event.sessionId) || []
       state.messages.set(event.sessionId, [...msgs, event.message])
       return { ...state }
-    case "SESSION_UPDATED":
+    }
+    case "SESSION_UPDATED": {
       const session = state.sessions.get(event.id)
       if (session) {
         Object.assign(session, event.patch)
       }
       return { ...state }
-    case "MESSAGE_PART_UPDATED":
+    }
+    case "MESSAGE_PART_UPDATED": {
       const sessionMsgs = state.messages.get(event.sessionId)
       if (sessionMsgs) {
         const msg = sessionMsgs.find(m => m.id === event.messageId)
@@ -47,6 +49,7 @@ export function appReducer(state: AppState, event: AppEvent): AppState {
         }
       }
       return { ...state }
+    }
     case "SERVER_STATUS_CHANGED":
       return { ...state, serverConnected: event.connected }
     default:

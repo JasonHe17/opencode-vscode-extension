@@ -291,7 +291,9 @@ body {
 
 #messageInput {
   width: 100%;
-  resize: none;
+  min-height: 80px;
+  max-height: 200px;
+  resize: vertical;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border);
@@ -301,10 +303,54 @@ body {
   font-size: 14px;
   outline: none;
   margin-bottom: 8px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 #messageInput:focus {
   border-color: var(--vscode-focusBorder);
+}
+
+#messageInput:empty:before {
+  content: attr(placeholder);
+  color: var(--vscode-input-placeholderForeground);
+  pointer-events: none;
+}
+
+.file-mention {
+  background-color: var(--vscode-textLink-foreground);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: all;
+  display: inline-block;
+  margin: 0 2px;
+  outline: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.file-mention:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 0 2px var(--vscode-textLink-foreground);
+}
+
+.file-mention.selected {
+  box-shadow: 0 0 0 3px var(--vscode-focusBorder);
+  background-color: var(--vscode-textLink-activeForeground);
+}
+
+.file-mention .line-range {
+  opacity: 0.8;
+  font-size: 0.9em;
+}
+
+/* Style for when the mention is selected/highlighted by the user */
+.file-mention::selection {
+  background-color: var(--vscode-editor-selectionBackground);
+  color: var(--vscode-editor-selectionForeground);
 }
 
 .input-actions {
@@ -358,6 +404,11 @@ body {
   overflow: auto;
   margin-bottom: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.file-mention-suggestions[hidden] {
+  display: none !important;
 }
 
 .file-suggestion {

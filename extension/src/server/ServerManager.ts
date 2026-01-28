@@ -3,6 +3,9 @@ import { exec } from "child_process"
 import { promisify } from "util"
 import * as net from "net"
 
+declare const AbortController: typeof globalThis.AbortController
+declare const clearTimeout: typeof globalThis.clearTimeout
+
 const execAsync = promisify(exec)
 
 export interface ServerStatus {

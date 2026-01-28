@@ -1,4 +1,4 @@
-import type { BusEvent } from "./types"
+import type { BusEvent } from "./types.js"
 
 export type EventCallback = (event: BusEvent) => void
 export type ErrorHandler = (error: Error) => void

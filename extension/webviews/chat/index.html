@@ -294,7 +294,12 @@
       margin: 0 auto;
     }
 
-    textarea {
+    .input-container {
+      position: relative;
+      width: 100%;
+    }
+
+    .message-input {
       width: 100%;
       min-height: 80px;
       max-height: 200px;
@@ -305,18 +310,22 @@
       color: var(--vscode-input-foreground);
       font-family: var(--vscode-font-family);
       font-size: var(--vscode-font-size);
-      resize: vertical;
       line-height: 1.5;
-      transition: border-color 0.2s;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      outline: none;
+      resize: vertical;
     }
 
-    textarea:focus {
-      outline: none;
+    .message-input:focus {
       border-color: var(--vscode-focusBorder);
     }
 
-    textarea::placeholder {
+    .message-input:empty:before {
+      content: attr(placeholder);
       color: var(--vscode-input-placeholderForeground);
+      pointer-events: none;
     }
 
     .input-actions {
@@ -435,8 +444,12 @@
       max-height: 200px;
       overflow-y: auto;
       margin-bottom: 4px;
-      z-index: 100;
+      z-index: 1000;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .file-mention-suggestions[hidden] {
+      display: none !important;
     }
 
     .suggestion-item {
@@ -537,13 +550,14 @@
 
       <div class="input-area">
         <div class="input-wrapper">
-          <div class="input-container" style="position: relative;">
+          <div class="input-container">
             <div class="file-mention-suggestions" id="fileSuggestions" hidden></div>
-            <textarea
+            <div
               id="messageInput"
+              class="message-input"
+              contenteditable="true"
               placeholder="Type your message here... Use @ to mention files"
-              rows="3"
-            ></textarea>
+            ></div>
           </div>
           <div class="input-actions">
             <div class="input-actions-row">

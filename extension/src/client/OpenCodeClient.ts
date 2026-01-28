@@ -60,7 +60,7 @@ export class OpenCodeClient {
       )
       
       const createPromise = this.sdk.session.create(options || {})
-      const response = await Promise.race([createPromise, timeoutPromise])
+      const response = await Promise.race([createPromise, timeoutPromise]) as any
       
       console.log("[OpenCodeClient] Session create response received")
       console.log("[OpenCodeClient] Session create response:", response)
@@ -70,9 +70,6 @@ export class OpenCodeClient {
       if (response.data) {
         // response.data exists
         session = Array.isArray(response.data) ? response.data?.[0] : response.data
-      } else if (response.body) {
-        // Try response.body
-        session = Array.isArray(response.body) ? response.body?.[0] : response.body
       } else if (response.id) {
         // Response is directly the session
         session = response
@@ -104,10 +101,10 @@ export class OpenCodeClient {
   async listSessions(): Promise<SessionInfo[]> {
     try {
       console.log("[OpenCodeClient] Listing sessions")
-      const response = await this.sdk.session.list()
+      const response = await this.sdk.session.list() as any
       console.log("[OpenCodeClient] List sessions response:", response)
       
-      let sessions = response.data || response.body || []
+      let sessions = response.data || []
       
       // Handle different formats
       if (!Array.isArray(sessions)) {
@@ -130,10 +127,10 @@ export class OpenCodeClient {
   async getSession(id: string): Promise<SessionInfo> {
     try {
       console.log("[OpenCodeClient] Getting session:", id)
-      const response = await this.sdk.session.get({ sessionID: id })
+      const response = await this.sdk.session.get({ sessionID: id }) as any
       console.log("[OpenCodeClient] Get session response:", response)
       
-      let session = response.data?.[0] || response.body?.[0] || response.data || response
+      let session = response.data?.[0] || response.data || response
       
       if (!session || !session.id) {
         throw new Error(`Session ${id} not found`)
@@ -188,7 +185,7 @@ export class OpenCodeClient {
   async forkSession(id: string, messageID?: string): Promise<SessionInfo> {
     try {
       console.log("[OpenCodeClient] Forking session:", id, "at message:", messageID)
-      const response = await this.sdk.session.fork({ sessionID: id, messageID })
+      const response = await this.sdk.session.fork({ sessionID: id, messageID }) as any
       const session = response.data?.[0]
       if (!session) {
         throw new Error(`Failed to fork session ${id}`)
@@ -303,7 +300,7 @@ export class OpenCodeClient {
             type: eventData.type,
             data: eventData.data
           })
-        } catch (e) {
+        } catch (e: any) {
           if (e.name === ' AbortError') {
             console.log("[OpenCodeClient] Stream aborted")
             break
@@ -321,7 +318,7 @@ export class OpenCodeClient {
 
   async checkServerAvailable(): Promise<boolean> {
     try {
-      const response = await this.sdk.global.health()
+      await this.sdk.global.health()
       console.log("[OpenCodeClient] Server is available")
       return true
     } catch (error) {
@@ -371,7 +368,7 @@ export class OpenCodeClient {
   async getModels(): Promise<Array<{ providerID: string; models: string[] }>> {
     console.log("[OpenCodeClient] Getting models")
     try {
-      const response = await this.sdk.config.providers({ directory: this.directory })
+      const response = await this.sdk.config.providers({ directory: this.directory }) as any
       console.log("[OpenCodeClient] Providers response:", response)
 
       let providers: any[] = []
@@ -407,10 +404,10 @@ export class OpenCodeClient {
   async getSessionMessages(id: string): Promise<any[]> {
     try {
       console.log("[OpenCodeClient] Getting messages for session:", id)
-      const response = await this.sdk.session.messages({ sessionID: id })
+      const response = await this.sdk.session.messages({ sessionID: id }) as any
       
       // Handle different response formats based on sdk.gen.ts (SessionMessagesResponses)
-      const rawMessages = response.data || response.body || response || []
+      const rawMessages = response.data || response || []
       console.log(`[OpenCodeClient] Got ${Array.isArray(rawMessages) ? rawMessages.length : 0} raw messages`)
       
       // Flatten the response format: { info: Message, parts: Array<Part> } -> { id, role, parts, ... }
