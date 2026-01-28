@@ -33,6 +33,8 @@ export class ChatPanel {
   private currentMessageId: string | null = null
   private pendingMessageContent: string = ""
   private lastUserMessage: string = ""
+  // Store reverted messages for redo functionality
+  private revertedMessages: Map<string, any[]> = new Map()
 
   private constructor(sessionManager: SessionManager) {
     this.sessionManager = sessionManager
@@ -299,8 +301,211 @@ export class ChatPanel {
         }
         break
 
+      case "revert":
+        await this.handleRevert(message)
+        break
+
+      case "unrevert":
+        await this.handleUnrevert(message)
+        break
+
       default:
         console.warn("[ChatPanel] Unknown message type:", message.type)
+    }
+  }
+
+  private async handleRevert(message: any): Promise<void> {
+    const { sessionId, messageId, partID } = message
+    const targetSessionId = sessionId || this.currentSessionId
+
+    if (!targetSessionId) {
+      this.postMessageToWebview({
+        type: "error",
+        error: "No active session to revert"
+      })
+      return
+    }
+
+    try {
+      // Get current messages before revert
+      const messagesBefore = await this.client.getSessionMessages(targetSessionId)
+      console.log("[ChatPanel] Messages before revert:", messagesBefore.length)
+      
+      // Find the target message index
+      let targetIndex = -1
+      if (messageId) {
+        targetIndex = messagesBefore.findIndex((m: any) => m.id === messageId)
+      } else {
+        // If no messageId specified, target the last message
+        targetIndex = messagesBefore.length - 1
+      }
+      
+      console.log("[ChatPanel] Target message index:", targetIndex)
+      
+      // Find the user message that should be the revert point
+      // We need to find the user message at or before the target
+      let userMessageIndex = -1
+      let userMessageToRestore = null
+      
+      if (targetIndex >= 0) {
+        // If target is a user message, use it directly
+        if (messagesBefore[targetIndex].role === "user") {
+          userMessageIndex = targetIndex
+        } else {
+          // If target is an assistant message, find the preceding user message
+          for (let i = targetIndex; i >= 0; i--) {
+            if (messagesBefore[i].role === "user") {
+              userMessageIndex = i
+              break
+            }
+          }
+        }
+      }
+      
+      // If still no user message found, find the last user message
+      if (userMessageIndex < 0) {
+        for (let i = messagesBefore.length - 1; i >= 0; i--) {
+          if (messagesBefore[i].role === "user") {
+            userMessageIndex = i
+            break
+          }
+        }
+      }
+      
+      console.log("[ChatPanel] User message index:", userMessageIndex)
+      
+      // Get the user message content to restore
+      if (userMessageIndex >= 0) {
+        const userMsg = messagesBefore[userMessageIndex]
+        const textParts = userMsg.parts?.filter((p: any) => p.type === "text")
+        if (textParts && textParts.length > 0) {
+          userMessageToRestore = textParts.map((p: any) => p.text || "").join("")
+        }
+      }
+
+      console.log("[ChatPanel] User message to restore:", userMessageToRestore)
+
+      // Call revert API with the user message ID
+      const userMessageId = userMessageIndex >= 0 ? messagesBefore[userMessageIndex].id : messageId
+      const revertResponse = await this.sessionManager.revertSession(targetSessionId, userMessageId, partID)
+      console.log("[ChatPanel] Revert API response:", revertResponse)
+      
+      // Find messages that should be removed (from the user message onwards)
+      let removedMessages: any[] = []
+      let remainingMessages: any[] = []
+      
+      if (userMessageIndex >= 0) {
+        // Remove the user message and all messages after it
+        removedMessages = messagesBefore.slice(userMessageIndex)
+        remainingMessages = messagesBefore.slice(0, userMessageIndex)
+        console.log("[ChatPanel] Removing messages from user message index", userMessageIndex, "count:", removedMessages.length)
+      } else if (messagesBefore.length > 0) {
+        // Fallback: remove the last message if no user message found
+        removedMessages = [messagesBefore[messagesBefore.length - 1]]
+        remainingMessages = messagesBefore.slice(0, -1)
+      }
+      
+      // Store removed messages for redo functionality
+      if (removedMessages.length > 0) {
+        this.revertedMessages.set(targetSessionId, removedMessages)
+        console.log("[ChatPanel] Stored", removedMessages.length, "reverted messages for redo")
+      }
+      
+      this.postMessageToWebview({
+        type: "revertSuccess",
+        sessionId: targetSessionId,
+        messageId: userMessageId,
+        removedMessages: removedMessages.map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          parts: m.parts
+        })),
+        userMessageToRestore,
+        remainingMessages: remainingMessages.map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          parts: m.parts
+        }))
+      })
+    } catch (error) {
+      console.error("[ChatPanel] Failed to revert:", error)
+      this.postMessageToWebview({
+        type: "error",
+        error: `Failed to revert: ${error}`
+      })
+    }
+  }
+
+  private async handleUnrevert(message: any): Promise<void> {
+    const { sessionId } = message
+    const targetSessionId = sessionId || this.currentSessionId
+
+    if (!targetSessionId) {
+      this.postMessageToWebview({
+        type: "error",
+        error: "No active session to restore"
+      })
+      return
+    }
+
+    try {
+      // Get current messages before unrevert
+      const messagesBefore = await this.client.getSessionMessages(targetSessionId)
+      console.log("[ChatPanel] Messages before unrevert:", messagesBefore.length)
+      
+      // Get the stored reverted messages before calling unrevert (unrevert clears the revert state)
+      const storedRevertedMessages = this.revertedMessages.get(targetSessionId)
+      console.log("[ChatPanel] Stored reverted messages:", storedRevertedMessages?.length || 0)
+      
+      // Call unrevert API - this clears the session revert field
+      const unrevertResponse = await this.sessionManager.unrevertSession(targetSessionId)
+      console.log("[ChatPanel] Unrevert API response:", unrevertResponse)
+      
+      // After unrevert, reload messages from server
+      const messagesAfter = await this.client.getSessionMessages(targetSessionId)
+      console.log("[ChatPanel] Messages after unrevert:", messagesAfter.length)
+      
+      // Find restored messages (messages that are now present but weren't in the filtered list)
+      const restoredMessages = messagesAfter.filter((m: any) => 
+        !messagesBefore.find((before: any) => before.id === m.id)
+      )
+      
+      console.log("[ChatPanel] Restored messages count from server:", restoredMessages.length)
+      
+      // If server didn't return new messages, use the stored reverted messages
+      let finalRestoredMessages = restoredMessages
+      let finalAllMessages = messagesAfter
+      
+      if (restoredMessages.length === 0 && storedRevertedMessages && storedRevertedMessages.length > 0) {
+        console.log("[ChatPanel] Using stored reverted messages for redo:", storedRevertedMessages.length)
+        finalRestoredMessages = storedRevertedMessages
+        // Combine previous messages with stored reverted messages
+        finalAllMessages = [...messagesBefore, ...storedRevertedMessages]
+        
+        // Clear stored reverted messages after redo
+        this.revertedMessages.delete(targetSessionId)
+      }
+      
+      this.postMessageToWebview({
+        type: "unrevertSuccess",
+        sessionId: targetSessionId,
+        restoredMessages: finalRestoredMessages.map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          parts: m.parts
+        })),
+        allMessages: finalAllMessages.map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          parts: m.parts
+        }))
+      })
+    } catch (error) {
+      console.error("[ChatPanel] Failed to unrevert:", error)
+      this.postMessageToWebview({
+        type: "error",
+        error: `Failed to restore: ${error}`
+      })
     }
   }
 

@@ -399,6 +399,15 @@
       cursor: pointer;
     }
 
+    .icon-button:hover {
+      opacity: 0.9;
+    }
+
+    .icon-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .send-button {
       padding: 4px 12px;
       border: none;
@@ -419,6 +428,61 @@
       color: var(--vscode-button-secondaryForeground);
       cursor: not-allowed;
       opacity: 0.6;
+    }
+
+    /* Undo/Redo buttons */
+    .undo-button, .redo-button {
+      padding: 4px 8px;
+      border: 1px solid var(--vscode-button-secondaryBackground);
+      border-radius: 4px;
+      background-color: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .undo-button:hover:not(:disabled), .redo-button:hover:not(:disabled) {
+      opacity: 0.9;
+      background-color: var(--vscode-button-hoverBackground);
+    }
+
+    .undo-button:disabled, .redo-button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Message actions */
+    .message-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .message:hover .message-actions {
+      opacity: 1;
+    }
+
+    .message-action-btn {
+      padding: 2px 8px;
+      border: 1px solid var(--vscode-button-secondaryBackground);
+      border-radius: 4px;
+      background-color: transparent;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .message-action-btn:hover {
+      background-color: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
     }
 
     /* File mention */
@@ -581,6 +645,8 @@
                 </div>
               </div>
               <div class="input-actions-right">
+                <button class="undo-button" id="undoButton" title="Undo last change (Ctrl+Z)">↩️ Undo</button>
+                <button class="redo-button" id="redoButton" title="Redo (Ctrl+Y)">↪️ Redo</button>
                 <button class="icon-button" id="attachButton" title="Attach file">📎</button>
                 <button class="send-button" id="sendButton" disabled>Send</button>
               </div>

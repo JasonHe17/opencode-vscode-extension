@@ -58,6 +58,23 @@ export class SessionManager {
       }
     }
 
+    if (this.activeSessionId && !this.activeSessionId.startsWith("temp_")) {
+      const oldSession = this.sessions.get(this.activeSessionId)
+      if (oldSession && oldSession.status === "active") {
+        oldSession.status = "idle"
+        oldSession.lastActivity = Date.now()
+        this.updateSessionCache(oldSession.id)
+
+        this.fireEvent({
+          type: "updated",
+          sessionId: this.activeSessionId,
+          timestamp: Date.now()
+        })
+
+        console.log(`[SessionManager] Deactivated previous session: ${this.activeSessionId}`)
+      }
+    }
+
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
     const sessionWithStatus: SessionWithStatus = {
@@ -421,6 +438,51 @@ export class SessionManager {
       return sessionWithStatus
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to fork session: ${error}`)
+      throw error
+    }
+  }
+
+  async revertSession(sessionId: string, messageId?: string, partID?: string): Promise<any> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`)
+    }
+
+    try {
+      const response = await this.client.revertSession(sessionId, messageId, partID)
+
+      this.fireEvent({
+        type: "updated",
+        sessionId,
+        timestamp: Date.now()
+      })
+
+      vscode.window.showInformationMessage(`Session "${session.title}" reverted successfully`)
+      return response
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to revert session: ${error}`)
+      throw error
+    }
+  }
+
+  async unrevertSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`)
+    }
+
+    try {
+      await this.client.unrevertSession(sessionId)
+
+      this.fireEvent({
+        type: "updated",
+        sessionId,
+        timestamp: Date.now()
+      })
+
+      vscode.window.showInformationMessage(`Session "${session.title}" restored successfully`)
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to restore session: ${error}`)
       throw error
     }
   }

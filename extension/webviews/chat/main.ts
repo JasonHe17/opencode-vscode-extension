@@ -10,6 +10,8 @@ const messagesContainer = document.getElementById("messages")!
 const messageInput = document.getElementById("messageInput") as HTMLDivElement
 const sendButton = document.getElementById("sendButton") as HTMLButtonElement
 const attachButton = document.getElementById("attachButton") as HTMLButtonElement
+const undoButton = document.getElementById("undoButton") as HTMLButtonElement
+const redoButton = document.getElementById("redoButton") as HTMLButtonElement
 const fileSuggestions = document.getElementById("fileSuggestions")!
 const agentSelect = document.getElementById("agentSelect") as HTMLSelectElement
 const modelSelect = document.getElementById("modelSelect") as HTMLSelectElement
@@ -17,6 +19,8 @@ const modelSelect = document.getElementById("modelSelect") as HTMLSelectElement
 let messages: any[] = []
 let currentSessionId: string | null = null
 let currentSessionTitle: string | null = null
+let canUndo = false
+let canRedo = false
 
 // Track current mention state for file suggestions
 let currentMention: { startOffset: number; searchTerm: string; textBefore: string; savedRange: Range } | null = null
@@ -71,6 +75,30 @@ function renderMessage(message: any): void {
       console.log("[renderMessage] Unknown part type:", part.type, part)
     }
   })
+
+  // Add message actions (undo button) for user messages
+  if (message.role === "user" && currentSessionId && !currentSessionId.startsWith("temp_")) {
+    const actionsDiv = document.createElement("div")
+    actionsDiv.className = "message-actions"
+
+    const undoBtn = document.createElement("button")
+    undoBtn.className = "message-action-btn"
+    undoBtn.innerHTML = "↩️ Undo from here"
+    undoBtn.title = "Revert session to before this message"
+    undoBtn.addEventListener("click", () => {
+      console.log(`[Message Undo] Reverting from user message: ${message.id}`)
+      postMessage({
+        type: "revert",
+        sessionId: currentSessionId,
+        messageId: message.id
+      })
+      undoButton.disabled = true
+      redoButton.disabled = true
+    })
+
+    actionsDiv.appendChild(undoBtn)
+    contentDiv.appendChild(actionsDiv)
+  }
 
   messagesContainer.appendChild(messageDiv)
   messagesContainer.scrollTop = messagesContainer.scrollHeight
@@ -434,15 +462,20 @@ window.addEventListener("message", (event) => {
       currentSessionTitle = message.sessionTitle || "New Session"
       const titleEl = document.getElementById("sessionTitle")
       if (titleEl) titleEl.textContent = currentSessionTitle
-      
+
       resetState()
-      
+
       messages = message.messages || []
       messagesContainer.innerHTML = ""
       messages.forEach(renderMessage)
-      
+
       console.log("[init] Initialized with", messages.length, "messages, sessionId:", currentSessionId)
-      
+
+      // Enable undo if there are messages and it's a real session
+      canUndo = messages.length > 0 && !!currentSessionId && !currentSessionId.startsWith("temp_")
+      canRedo = false // Reset redo state on init
+      updateUndoRedoButtons()
+
       if (currentSessionId) {
         console.log("[init] Focusing input for session:", currentSessionId)
         messageInput.innerHTML = ""
@@ -456,6 +489,12 @@ window.addEventListener("message", (event) => {
       }
       renderMessage(message)
       messages.push(message)
+      // Enable undo when new message arrives
+      if (currentSessionId && !currentSessionId.startsWith("temp_")) {
+        canUndo = true
+        canRedo = false // New message clears redo history
+        updateUndoRedoButtons()
+      }
       break
 
     case "messagePart":
@@ -500,6 +539,69 @@ window.addEventListener("message", (event) => {
 
     case "serverStatus":
       updateSelectors(message.agents || [], message.models || [])
+      break
+
+    case "revertSuccess":
+      console.log("[Webview] Revert successful", message)
+      
+      // Remove deleted messages from UI
+      if (message.removedMessages) {
+        message.removedMessages.forEach((removedMsg: any) => {
+          const msgEl = messagesContainer.querySelector(`[data-message-id="${removedMsg.id}"]`)
+          if (msgEl) {
+            msgEl.remove()
+          }
+        })
+      }
+      
+      // Update local messages array
+      if (message.remainingMessages) {
+        messages = message.remainingMessages
+      }
+      
+      // Restore user message to input box
+      if (message.userMessageToRestore) {
+        messageInput.innerHTML = ""
+        insertText(message.userMessageToRestore)
+        messageInput.focus()
+      }
+      
+      canUndo = messages.length > 0
+      canRedo = true
+      updateUndoRedoButtons()
+      break
+
+    case "unrevertSuccess":
+      console.log("[Webview] Unrevert (redo) successful", message)
+      
+      // Add restored messages back to UI
+      if (message.restoredMessages) {
+        message.restoredMessages.forEach((restoredMsg: any) => {
+          // Check if message already exists
+          const existingEl = messagesContainer.querySelector(`[data-message-id="${restoredMsg.id}"]`)
+          if (!existingEl) {
+            renderMessage(restoredMsg)
+          }
+        })
+      }
+      
+      // Update local messages array
+      if (message.allMessages) {
+        messages = message.allMessages
+      }
+      
+      // Clear input box on redo (since we're restoring the conversation)
+      messageInput.innerHTML = ""
+      
+      canUndo = true
+      canRedo = false
+      updateUndoRedoButtons()
+      break
+
+    case "error":
+      console.error("[Webview] Error:", message.error)
+      // Re-enable buttons on error
+      updateUndoRedoButtons()
       break
   }
 })
@@ -865,13 +967,76 @@ attachButton.addEventListener("click", () => {
   })
 })
 
+undoButton.addEventListener("click", () => {
+  if (!currentSessionId || currentSessionId.startsWith("temp_")) {
+    console.warn("[Undo] Cannot undo: no active session or placeholder session")
+    return
+  }
+  
+  const lastMessage = messages[messages.length - 1]
+  if (!lastMessage) {
+    console.warn("[Undo] No messages to undo")
+    return
+  }
+  
+  console.log(`[Undo] Reverting to message: ${lastMessage.id}`)
+  postMessage({
+    type: "revert",
+    sessionId: currentSessionId,
+    messageId: lastMessage.id
+  })
+  
+  undoButton.disabled = true
+  redoButton.disabled = true
+})
+
+redoButton.addEventListener("click", () => {
+  if (!currentSessionId || currentSessionId.startsWith("temp_")) {
+    console.warn("[Redo] Cannot redo: no active session or placeholder session")
+    return
+  }
+  
+  console.log(`[Redo] Unreverting session: ${currentSessionId}`)
+  postMessage({
+    type: "unrevert",
+    sessionId: currentSessionId
+  })
+  
+  undoButton.disabled = true
+  redoButton.disabled = true
+})
+
+function updateUndoRedoButtons(): void {
+  undoButton.disabled = !canUndo || !currentSessionId || currentSessionId.startsWith("temp_") || messages.length === 0
+  redoButton.disabled = !canRedo || !currentSessionId || currentSessionId.startsWith("temp_")
+}
+
 messageInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
     return
   }
-  
+
+  // Handle Ctrl+Z for undo
+  if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+    e.preventDefault()
+    if (!undoButton.disabled) {
+      undoButton.click()
+    }
+    return
+  }
+
+  // Handle Ctrl+Y or Ctrl+Shift+Z for redo
+  if ((e.key === "y" && (e.ctrlKey || e.metaKey)) ||
+      (e.key === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
+    e.preventDefault()
+    if (!redoButton.disabled) {
+      redoButton.click()
+    }
+    return
+  }
+
   // Handle Backspace and Delete for file mentions
   if (e.key === "Backspace") {
     handleBackspace(e)

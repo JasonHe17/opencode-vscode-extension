@@ -125,6 +125,18 @@
         "title": "Refresh Sessions",
         "category": "OpenCode",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "opencode.session.revert",
+        "title": "Undo Last Change",
+        "category": "OpenCode",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "opencode.session.unrevert",
+        "title": "Redo",
+        "category": "OpenCode",
+        "icon": "$(redo)"
       }
     ],
     "keybindings": [

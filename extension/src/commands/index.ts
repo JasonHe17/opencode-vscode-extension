@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { createSession, setActiveSession as setSessionActive, deleteSession, forkSession, showSession } from "./sessionCommands.js"
+import { createSession, setActiveSession as setSessionActive, deleteSession, forkSession, showSession, revertSession, unrevertSession } from "./sessionCommands.js"
 import { openChat, sendMessage, attachFile, explainSelection, refactorSelection, generateTests } from "./chatCommands.js"
 import { openSettings, selectAgent, selectModel, setApiKey } from "./configCommands.js"
 
@@ -68,12 +68,28 @@ function registerSessionCommands(context: vscode.ExtensionContext): void {
     }
   )
 
+  const revertSessionCommand = vscode.commands.registerCommand(
+    "opencode.session.revert",
+    async (sessionId: string, messageId?: string, partID?: string) => {
+      await revertSession(sessionId, messageId, partID)
+    }
+  )
+
+  const unrevertSessionCommand = vscode.commands.registerCommand(
+    "opencode.session.unrevert",
+    async (sessionId: string) => {
+      await unrevertSession(sessionId)
+    }
+  )
+
   context.subscriptions.push(
     createSessionCommand,
     setActiveSessionCommand,
     deleteSessionCommand,
     forkSessionCommand,
-    showSessionCommand
+    showSessionCommand,
+    revertSessionCommand,
+    unrevertSessionCommand
   )
 }
 

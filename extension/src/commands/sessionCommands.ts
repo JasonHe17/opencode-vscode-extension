@@ -7,15 +7,15 @@ export async function createSession(
 ): Promise<void> {
   const sessionManager = getSessionManager()
   const chatPanel = getChatPanel(sessionManager)
-  
+
   try {
     console.log("[createSession] Creating new placeholder session")
-    
+
     const session = sessionManager.createPlaceholderSession(options)
     await vscode.commands.executeCommand("opencodeChat.focus")
-    
+
     await chatPanel.show(session.id)
-    
+
     console.log("[createSession] Placeholder session created and chat shown:", session.id)
   } catch (error) {
     vscode.window.showErrorMessage(`Failed to create session: ${error}`)
@@ -63,4 +63,26 @@ export async function showSession(sessionId: string): Promise<void> {
 
   await sessionManager.setActiveSession(sessionId)
   await vscode.commands.executeCommand("opencode.chat.open", sessionId)
+}
+
+export async function revertSession(
+  sessionId: string,
+  messageId?: string,
+  partID?: string
+): Promise<void> {
+  const sessionManager = getSessionManager()
+  try {
+    await sessionManager.revertSession(sessionId, messageId, partID)
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to revert session: ${error}`)
+  }
+}
+
+export async function unrevertSession(sessionId: string): Promise<void> {
+  const sessionManager = getSessionManager()
+  try {
+    await sessionManager.unrevertSession(sessionId)
+  } catch (error) {
+    vscode.window.showErrorMessage(`Failed to restore session: ${error}`)
+  }
 }

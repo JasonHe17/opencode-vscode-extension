@@ -9,12 +9,16 @@
   var messageInput = document.getElementById("messageInput");
   var sendButton = document.getElementById("sendButton");
   var attachButton = document.getElementById("attachButton");
+  var undoButton = document.getElementById("undoButton");
+  var redoButton = document.getElementById("redoButton");
   var fileSuggestions = document.getElementById("fileSuggestions");
   var agentSelect = document.getElementById("agentSelect");
   var modelSelect = document.getElementById("modelSelect");
   var messages = [];
   var currentSessionId = null;
   var currentSessionTitle = null;
+  var canUndo = false;
+  var canRedo = false;
   var currentMention = null;
   agentSelect.addEventListener("change", () => {
     postMessage({
@@ -60,6 +64,26 @@
         console.log("[renderMessage] Unknown part type:", part.type, part);
       }
     });
+    if (message.role === "user" && currentSessionId && !currentSessionId.startsWith("temp_")) {
+      const actionsDiv = document.createElement("div");
+      actionsDiv.className = "message-actions";
+      const undoBtn = document.createElement("button");
+      undoBtn.className = "message-action-btn";
+      undoBtn.innerHTML = "\u21A9\uFE0F Undo from here";
+      undoBtn.title = "Revert session to before this message";
+      undoBtn.addEventListener("click", () => {
+        console.log(`[Message Undo] Reverting from user message: ${message.id}`);
+        postMessage({
+          type: "revert",
+          sessionId: currentSessionId,
+          messageId: message.id
+        });
+        undoButton.disabled = true;
+        redoButton.disabled = true;
+      });
+      actionsDiv.appendChild(undoBtn);
+      contentDiv.appendChild(actionsDiv);
+    }
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
   }
@@ -378,6 +402,9 @@
         messagesContainer.innerHTML = "";
         messages.forEach(renderMessage);
         console.log("[init] Initialized with", messages.length, "messages, sessionId:", currentSessionId);
+        canUndo = messages.length > 0 && !!currentSessionId && !currentSessionId.startsWith("temp_");
+        canRedo = false;
+        updateUndoRedoButtons();
         if (currentSessionId) {
           console.log("[init] Focusing input for session:", currentSessionId);
           messageInput.innerHTML = "";
@@ -390,6 +417,11 @@
         }
         renderMessage(message);
         messages.push(message);
+        if (currentSessionId && !currentSessionId.startsWith("temp_")) {
+          canUndo = true;
+          canRedo = false;
+          updateUndoRedoButtons();
+        }
         break;
       case "messagePart":
         if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
@@ -427,6 +459,50 @@
         break;
       case "serverStatus":
         updateSelectors(message.agents || [], message.models || []);
+        break;
+      case "revertSuccess":
+        console.log("[Webview] Revert successful", message);
+        if (message.removedMessages) {
+          message.removedMessages.forEach((removedMsg) => {
+            const msgEl = messagesContainer.querySelector(`[data-message-id="${removedMsg.id}"]`);
+            if (msgEl) {
+              msgEl.remove();
+            }
+          });
+        }
+        if (message.remainingMessages) {
+          messages = message.remainingMessages;
+        }
+        if (message.userMessageToRestore) {
+          messageInput.innerHTML = "";
+          insertText(message.userMessageToRestore);
+          messageInput.focus();
+        }
+        canUndo = messages.length > 0;
+        canRedo = true;
+        updateUndoRedoButtons();
+        break;
+      case "unrevertSuccess":
+        console.log("[Webview] Unrevert (redo) successful", message);
+        if (message.restoredMessages) {
+          message.restoredMessages.forEach((restoredMsg) => {
+            const existingEl = messagesContainer.querySelector(`[data-message-id="${restoredMsg.id}"]`);
+            if (!existingEl) {
+              renderMessage(restoredMsg);
+            }
+          });
+        }
+        if (message.allMessages) {
+          messages = message.allMessages;
+        }
+        messageInput.innerHTML = "";
+        canUndo = true;
+        canRedo = false;
+        updateUndoRedoButtons();
+        break;
+      case "error":
+        console.error("[Webview] Error:", message.error);
+        updateUndoRedoButtons();
         break;
     }
   });
@@ -663,10 +739,60 @@
       type: "attachFile"
     });
   });
+  undoButton.addEventListener("click", () => {
+    if (!currentSessionId || currentSessionId.startsWith("temp_")) {
+      console.warn("[Undo] Cannot undo: no active session or placeholder session");
+      return;
+    }
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage) {
+      console.warn("[Undo] No messages to undo");
+      return;
+    }
+    console.log(`[Undo] Reverting to message: ${lastMessage.id}`);
+    postMessage({
+      type: "revert",
+      sessionId: currentSessionId,
+      messageId: lastMessage.id
+    });
+    undoButton.disabled = true;
+    redoButton.disabled = true;
+  });
+  redoButton.addEventListener("click", () => {
+    if (!currentSessionId || currentSessionId.startsWith("temp_")) {
+      console.warn("[Redo] Cannot redo: no active session or placeholder session");
+      return;
+    }
+    console.log(`[Redo] Unreverting session: ${currentSessionId}`);
+    postMessage({
+      type: "unrevert",
+      sessionId: currentSessionId
+    });
+    undoButton.disabled = true;
+    redoButton.disabled = true;
+  });
+  function updateUndoRedoButtons() {
+    undoButton.disabled = !canUndo || !currentSessionId || currentSessionId.startsWith("temp_") || messages.length === 0;
+    redoButton.disabled = !canRedo || !currentSessionId || currentSessionId.startsWith("temp_");
+  }
   messageInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+      return;
+    }
+    if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      e.preventDefault();
+      if (!undoButton.disabled) {
+        undoButton.click();
+      }
+      return;
+    }
+    if (e.key === "y" && (e.ctrlKey || e.metaKey) || e.key === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+      e.preventDefault();
+      if (!redoButton.disabled) {
+        redoButton.click();
+      }
       return;
     }
     if (e.key === "Backspace") {

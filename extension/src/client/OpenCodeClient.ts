@@ -124,7 +124,7 @@ export class OpenCodeClient {
     }
   }
 
-  async getSession(id: string): Promise<SessionInfo> {
+  async getSession(id: string): Promise<SessionInfo & { revert?: any }> {
     try {
       console.log("[OpenCodeClient] Getting session:", id)
       const response = await this.sdk.session.get({ sessionID: id }) as any
@@ -135,7 +135,10 @@ export class OpenCodeClient {
       if (!session || !session.id) {
         throw new Error(`Session ${id} not found`)
       }
-      return this.normalizeSessionInfo(session)
+      return {
+        ...this.normalizeSessionInfo(session),
+        revert: session.revert
+      }
     } catch (error) {
       console.error("[OpenCodeClient] Failed to get session:", error)
       throw error
@@ -405,11 +408,11 @@ export class OpenCodeClient {
     try {
       console.log("[OpenCodeClient] Getting messages for session:", id)
       const response = await this.sdk.session.messages({ sessionID: id }) as any
-      
+
       // Handle different response formats based on sdk.gen.ts (SessionMessagesResponses)
       const rawMessages = response.data || response || []
       console.log(`[OpenCodeClient] Got ${Array.isArray(rawMessages) ? rawMessages.length : 0} raw messages`)
-      
+
       // Flatten the response format: { info: Message, parts: Array<Part> } -> { id, role, parts, ... }
       const messages = Array.isArray(rawMessages) ? rawMessages.map((msg: any) => {
         const info = msg.info || msg
@@ -421,11 +424,44 @@ export class OpenCodeClient {
           time: info.time
         }
       }) : []
-      
+
       console.log(`[OpenCodeClient] Processed ${messages.length} flattened messages`)
       return messages
     } catch (error) {
       console.error("[OpenCodeClient] Failed to get session messages:", error)
+      throw error
+    }
+  }
+
+  async revertSession(sessionID: string, messageID?: string, partID?: string): Promise<any> {
+    try {
+      console.log(`[OpenCodeClient] Reverting session ${sessionID}, message: ${messageID}, part: ${partID}`)
+      const response = await this.sdk.session.revert({
+        sessionID,
+        directory: this.directory,
+        messageID,
+        partID
+      })
+      console.log(`[OpenCodeClient] Session ${sessionID} reverted successfully, response:`, response)
+      return response
+    } catch (error) {
+      console.error(`[OpenCodeClient] Failed to revert session ${sessionID}:`, error)
+      this.handleError(error, `Failed to revert session`)
+      throw error
+    }
+  }
+
+  async unrevertSession(sessionID: string): Promise<void> {
+    try {
+      console.log(`[OpenCodeClient] Unreverting session ${sessionID}`)
+      await this.sdk.session.unrevert({
+        sessionID,
+        directory: this.directory
+      })
+      console.log(`[OpenCodeClient] Session ${sessionID} unreverted successfully`)
+    } catch (error) {
+      console.error(`[OpenCodeClient] Failed to unrevert session ${sessionID}:`, error)
+      this.handleError(error, `Failed to unrevert session`)
       throw error
     }
   }
