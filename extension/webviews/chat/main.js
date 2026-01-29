@@ -36,16 +36,24 @@
     vscodeApi.postMessage(message);
   }
   function renderMessage(message) {
-    const messageDiv = document.createElement("div");
-    messageDiv.className = `message ${message.role}`;
-    messageDiv.setAttribute("data-message-id", message.id);
-    const roleDiv = document.createElement("div");
-    roleDiv.className = "message-role";
-    roleDiv.textContent = message.role === "user" ? "You" : "OpenCode";
-    messageDiv.appendChild(roleDiv);
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "message-content";
-    messageDiv.appendChild(contentDiv);
+    console.log("[renderMessage] Rendering message:", message.id, "role:", message.role);
+    const lastMsgEl = messagesContainer.lastElementChild;
+    const isLastAssistant = lastMsgEl && lastMsgEl.classList.contains("assistant");
+    const shouldMerge = isLastAssistant && message.role === "assistant";
+    console.log("[renderMessage] shouldMerge:", shouldMerge, "isLastAssistant:", isLastAssistant);
+    let messageDiv;
+    let contentDiv;
+    if (shouldMerge) {
+      messageDiv = lastMsgEl;
+      contentDiv = messageDiv.querySelector(".message-content");
+      messageDiv.setAttribute("data-message-id", message.id);
+      console.log("[renderMessage] Merged into existing element, new ID:", message.id);
+    } else {
+      console.log("[renderMessage] Creating new message element...");
+      messageDiv = createMessageElement(message);
+      contentDiv = messageDiv.querySelector(".message-content");
+      messagesContainer.appendChild(messageDiv);
+    }
     message.parts.forEach((part) => {
       if (part.type === "text") {
         const textDiv = renderTextPart(getPartContent(part));
@@ -84,8 +92,32 @@
       actionsDiv.appendChild(undoBtn);
       contentDiv.appendChild(actionsDiv);
     }
-    messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+  function createMessageElement(message) {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message ${message.role}`;
+    messageDiv.setAttribute("data-message-id", message.id);
+    const headerDiv = document.createElement("div");
+    headerDiv.className = "message-header";
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "message-icon";
+    iconSpan.textContent = message.role === "user" ? "\u{1F464}" : "\u{1F916}";
+    const roleSpan = document.createElement("span");
+    roleSpan.className = "message-role";
+    if (message.role === "user") {
+      roleSpan.textContent = "You";
+    } else {
+      const agentName = agentSelect.value || "OpenCode";
+      roleSpan.textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+    }
+    headerDiv.appendChild(iconSpan);
+    headerDiv.appendChild(roleSpan);
+    messageDiv.appendChild(headerDiv);
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "message-content";
+    messageDiv.appendChild(contentDiv);
+    return messageDiv;
   }
   function renderTextPart(text) {
     const pre = document.createElement("div");
@@ -104,8 +136,8 @@
     reasoningDiv.className = "reasoning-container";
     reasoningDiv.setAttribute("data-collapsed", "true");
     const label = document.createElement("div");
-    label.className = "reasoning-label";
-    label.innerHTML = `<span class="reasoning-icon">\u{1F9E0}</span> Thinking... <span class="collapse-icon">\u25BC</span>`;
+    label.className = "reasoning-header";
+    label.innerHTML = `<span class="reasoning-icon">\u{1F9E0}</span> \u601D\u8003\u8FC7\u7A0B <span class="collapse-icon">\u25BC</span>`;
     reasoningDiv.appendChild(label);
     const textDiv = document.createElement("div");
     textDiv.className = "reasoning-content";
@@ -139,10 +171,17 @@
   }
   function updateMessagePart(messageId, partId, part) {
     if (!partId) return;
+    console.log("[updateMessagePart] messageId:", messageId, "partId:", partId);
     const message = messages.find((m) => m.id === messageId);
-    if (!message) return;
+    if (!message) {
+      console.log("[updateMessagePart] Message not found in local array:", messageId);
+      return;
+    }
     const messageEl = messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
-    if (!messageEl) return;
+    if (!messageEl) {
+      console.log("[updateMessagePart] Message element not found in DOM:", messageId);
+      return;
+    }
     const contentDiv = messageEl.querySelector(".message-content");
     if (!contentDiv) return;
     let existingPart = message.parts.find((p) => p.id === partId || p.content && p.content.id === partId);
@@ -175,9 +214,10 @@
         const reasoningDiv = document.createElement("div");
         reasoningDiv.className = "reasoning-container";
         reasoningDiv.setAttribute("data-part-id", partId);
+        reasoningDiv.setAttribute("data-collapsed", "true");
         const label = document.createElement("div");
-        label.className = "reasoning-label";
-        label.innerHTML = `<span class="reasoning-icon">\u{1F9E0}</span> Thinking... <span class="collapse-icon">\u25BC</span>`;
+        label.className = "reasoning-header";
+        label.innerHTML = `<span class="reasoning-icon">\u{1F9E0}</span> \u601D\u8003\u8FC7\u7A0B <span class="collapse-icon">\u25BC</span>`;
         reasoningDiv.appendChild(label);
         const textDiv = document.createElement("div");
         textDiv.className = "reasoning-content";
@@ -267,7 +307,6 @@
       html += `
       <div class="tool-content">
         <div class="tool-command-section">
-          <div class="tool-command-label">Command</div>
           <pre class="tool-command">${escapeHtml(toolInput.command || toolInput.description || toolInput.location || "")}</pre>
         </div>
     `;
@@ -275,8 +314,11 @@
     if (stateStatus === "error" && error) {
       if (shouldRenderCommandOutput) {
         html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Error</div>
+        <div class="tool-output-section" data-collapsed="true">
+          <div class="output-toggle" onclick="toggleToolSection(this)">
+            <span class="tool-output-label">Error</span>
+            <span class="toggle-icon">\u25B6</span>
+          </div>
           <pre class="tool-output tool-error">${escapeHtml(error)}</pre>
         </div>
       `;
@@ -288,25 +330,15 @@
       `;
       }
     } else if (output) {
-      const shouldCollapse = output.length > 500 || output.split("\n").length > 20;
-      if (shouldCollapse) {
-        html += `
-        <div class="tool-output-section" data-collapsed="true">
-          <div class="output-toggle" onclick="toggleToolSection(this)">
-            <span class="toggle-icon">\u25B6</span>
-            <span class="tool-output-label">Output</span>
-          </div>
-          <pre class="tool-output">${escapeHtml(output)}</pre>
+      html += `
+      <div class="tool-output-section" data-collapsed="true">
+        <div class="output-toggle" onclick="toggleToolSection(this)">
+          <span class="tool-output-label">Output</span>
+          <span class="toggle-icon">\u25B6</span>
         </div>
-      `;
-      } else {
-        html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Output</div>
-          <pre class="tool-output">${escapeHtml(output)}</pre>
-        </div>
-      `;
-      }
+        <pre class="tool-output">${escapeHtml(output)}</pre>
+      </div>
+    `;
     } else if (stateStatus === "pending") {
       if (shouldRenderCommandOutput) {
         html += `
@@ -369,7 +401,7 @@
       const isCollapsed = section.getAttribute("data-collapsed") === "true";
       console.log("[toggleToolSection] Current state:", isCollapsed, "section:", section.className);
       if (isCollapsed) {
-        section.removeAttribute("data-collapsed");
+        section.setAttribute("data-collapsed", "false");
       } else {
         section.setAttribute("data-collapsed", "true");
       }
@@ -377,7 +409,7 @@
       console.log("[toggleToolSection] New state:", newState);
       const icon = toggle.querySelector(".toggle-icon");
       if (icon) {
-        icon.textContent = isCollapsed ? "\u25BC" : "\u25B6";
+        icon.textContent = newState ? "\u25B6" : "\u25BC";
       }
     }
   };
@@ -398,7 +430,19 @@
         const titleEl = document.getElementById("sessionTitle");
         if (titleEl) titleEl.textContent = currentSessionTitle;
         resetState();
-        messages = message.messages || [];
+        const rawMessages = message.messages || [];
+        console.log("[init] Processing", rawMessages.length, "raw messages");
+        const processedMessages = [];
+        rawMessages.forEach((msg) => {
+          const lastMsg2 = processedMessages[processedMessages.length - 1];
+          if (lastMsg2 && lastMsg2.role === "assistant" && msg.role === "assistant") {
+            lastMsg2.parts = [...lastMsg2.parts || [], ...msg.parts || []];
+            lastMsg2.id = msg.id;
+          } else {
+            processedMessages.push({ ...msg });
+          }
+        });
+        messages = processedMessages;
         messagesContainer.innerHTML = "";
         messages.forEach(renderMessage);
         console.log("[init] Initialized with", messages.length, "messages, sessionId:", currentSessionId);
@@ -415,8 +459,16 @@
         if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
           break;
         }
+        const lastMsg = messages[messages.length - 1];
+        const shouldMerge = lastMsg && lastMsg.role === "assistant" && message.role === "assistant";
+        console.log("[Webview] Received message, shouldMerge:", shouldMerge);
         renderMessage(message);
-        messages.push(message);
+        if (shouldMerge) {
+          lastMsg.parts = [...lastMsg.parts || [], ...message.parts || []];
+          lastMsg.id = message.id;
+        } else {
+          messages.push(message);
+        }
         if (currentSessionId && !currentSessionId.startsWith("temp_")) {
           canUndo = true;
           canRedo = false;
@@ -427,6 +479,7 @@
         if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
           break;
         }
+        console.log("[Webview] Received messagePart:", message.messageId, "partId:", message.partId || message.part?.id);
         updateMessagePart(message.messageId, message.partId || message.part?.id, message.part);
         break;
       case "toolUpdate":
@@ -583,7 +636,7 @@
       let currentOffset = 0;
       let startNode = null;
       let startOffsetInNode = 0;
-      const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false);
+      const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null);
       let textNode = null;
       while (textNode = walker.nextNode()) {
         const nodeLength = textNode.textContent?.length || 0;
@@ -888,7 +941,7 @@
   }
   function getMessageText() {
     let text = "";
-    const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null);
     let node = null;
     while (node = walker.nextNode()) {
       if (node.nodeType === Node.TEXT_NODE) {

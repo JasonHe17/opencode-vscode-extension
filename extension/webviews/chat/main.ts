@@ -44,18 +44,32 @@ function postMessage(message: any): void {
 }
 
 function renderMessage(message: any): void {
-  const messageDiv = document.createElement("div")
-  messageDiv.className = `message ${message.role}`
-  messageDiv.setAttribute("data-message-id", message.id)
+  console.log("[renderMessage] Rendering message:", message.id, "role:", message.role)
+  
+  // Check if we should merge this message with the previous one
+  // Note: When called from init, messages array is already merged, so we check the DOM instead
+  const lastMsgEl = messagesContainer.lastElementChild as HTMLElement
+  const isLastAssistant = lastMsgEl && lastMsgEl.classList.contains("assistant")
+  
+  const shouldMerge = isLastAssistant && message.role === "assistant"
 
-  const roleDiv = document.createElement("div")
-  roleDiv.className = "message-role"
-  roleDiv.textContent = message.role === "user" ? "You" : "OpenCode"
-  messageDiv.appendChild(roleDiv)
+  console.log("[renderMessage] shouldMerge:", shouldMerge, "isLastAssistant:", isLastAssistant)
 
-  const contentDiv = document.createElement("div")
-  contentDiv.className = "message-content"
-  messageDiv.appendChild(contentDiv)
+  let messageDiv: HTMLElement
+  let contentDiv: HTMLElement
+
+  if (shouldMerge) {
+    messageDiv = lastMsgEl
+    contentDiv = messageDiv.querySelector(".message-content") as HTMLElement
+    // Update the ID to the latest one so subsequent parts can find it
+    messageDiv.setAttribute("data-message-id", message.id)
+    console.log("[renderMessage] Merged into existing element, new ID:", message.id)
+  } else {
+    console.log("[renderMessage] Creating new message element...")
+    messageDiv = createMessageElement(message)
+    contentDiv = messageDiv.querySelector(".message-content") as HTMLElement
+    messagesContainer.appendChild(messageDiv)
+  }
 
   message.parts.forEach((part: any) => {
     if (part.type === "text") {
@@ -100,8 +114,40 @@ function renderMessage(message: any): void {
     contentDiv.appendChild(actionsDiv)
   }
 
-  messagesContainer.appendChild(messageDiv)
   messagesContainer.scrollTop = messagesContainer.scrollHeight
+}
+
+function createMessageElement(message: any): HTMLElement {
+  const messageDiv = document.createElement("div")
+  messageDiv.className = `message ${message.role}`
+  messageDiv.setAttribute("data-message-id", message.id)
+
+  const headerDiv = document.createElement("div")
+  headerDiv.className = "message-header"
+  
+  const iconSpan = document.createElement("span")
+  iconSpan.className = "message-icon"
+  iconSpan.textContent = message.role === "user" ? "👤" : "🤖"
+  
+  const roleSpan = document.createElement("span")
+  roleSpan.className = "message-role"
+  if (message.role === "user") {
+    roleSpan.textContent = "You"
+  } else {
+    // Use agent name if available, otherwise default to OpenCode
+    const agentName = agentSelect.value || "OpenCode"
+    roleSpan.textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1)
+  }
+  
+  headerDiv.appendChild(iconSpan)
+  headerDiv.appendChild(roleSpan)
+  messageDiv.appendChild(headerDiv)
+
+  const contentDiv = document.createElement("div")
+  contentDiv.className = "message-content"
+  messageDiv.appendChild(contentDiv)
+
+  return messageDiv
 }
 
 function renderTextPart(text: string): HTMLElement {
@@ -124,8 +170,8 @@ function renderReasoningPart(content: any, container: HTMLElement): HTMLElement 
   reasoningDiv.setAttribute("data-collapsed", "true")
 
   const label = document.createElement("div")
-  label.className = "reasoning-label"
-  label.innerHTML = `<span class="reasoning-icon">🧠</span> Thinking... <span class="collapse-icon">▼</span>`
+  label.className = "reasoning-header"
+  label.innerHTML = `<span class="reasoning-icon">🧠</span> 思考过程 <span class="collapse-icon">▼</span>`
   reasoningDiv.appendChild(label)
 
   const textDiv = document.createElement("div")
@@ -166,11 +212,18 @@ function updateCollapseIcon(reasoningDiv: HTMLElement): void {
 
 function updateMessagePart(messageId: string, partId: string, part: any): void {
   if (!partId) return
+  console.log("[updateMessagePart] messageId:", messageId, "partId:", partId)
   const message = messages.find((m) => m.id === messageId)
-  if (!message) return
+  if (!message) {
+    console.log("[updateMessagePart] Message not found in local array:", messageId)
+    return
+  }
 
   const messageEl = messagesContainer.querySelector(`[data-message-id="${messageId}"]`)
-  if (!messageEl) return
+  if (!messageEl) {
+    console.log("[updateMessagePart] Message element not found in DOM:", messageId)
+    return
+  }
   const contentDiv = messageEl.querySelector(".message-content")
   if (!contentDiv) return
 
@@ -205,10 +258,11 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
       const reasoningDiv = document.createElement("div")
       reasoningDiv.className = "reasoning-container"
       reasoningDiv.setAttribute("data-part-id", partId)
+      reasoningDiv.setAttribute("data-collapsed", "true")
       
       const label = document.createElement("div")
-      label.className = "reasoning-label"
-      label.innerHTML = `<span class="reasoning-icon">🧠</span> Thinking... <span class="collapse-icon">▼</span>`
+      label.className = "reasoning-header"
+      label.innerHTML = `<span class="reasoning-icon">🧠</span> 思考过程 <span class="collapse-icon">▼</span>`
       reasoningDiv.appendChild(label)
 
       const textDiv = document.createElement("div")
@@ -318,7 +372,6 @@ function constructToolHtml(content: any): string {
     html += `
       <div class="tool-content">
         <div class="tool-command-section">
-          <div class="tool-command-label">Command</div>
           <pre class="tool-command">${escapeHtml(toolInput.command || toolInput.description || toolInput.location || "")}</pre>
         </div>
     `
@@ -327,8 +380,11 @@ function constructToolHtml(content: any): string {
   if (stateStatus === "error" && error) {
     if (shouldRenderCommandOutput) {
       html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Error</div>
+        <div class="tool-output-section" data-collapsed="true">
+          <div class="output-toggle" onclick="toggleToolSection(this)">
+            <span class="tool-output-label">Error</span>
+            <span class="toggle-icon">▶</span>
+          </div>
           <pre class="tool-output tool-error">${escapeHtml(error)}</pre>
         </div>
       `
@@ -340,26 +396,15 @@ function constructToolHtml(content: any): string {
       `
     }
   } else if (output) {
-    const shouldCollapse = output.length > 500 || output.split("\n").length > 20
-    
-    if (shouldCollapse) {
-      html += `
-        <div class="tool-output-section" data-collapsed="true">
-          <div class="output-toggle" onclick="toggleToolSection(this)">
-            <span class="toggle-icon">▶</span>
-            <span class="tool-output-label">Output</span>
-          </div>
-          <pre class="tool-output">${escapeHtml(output)}</pre>
+    html += `
+      <div class="tool-output-section" data-collapsed="true">
+        <div class="output-toggle" onclick="toggleToolSection(this)">
+          <span class="tool-output-label">Output</span>
+          <span class="toggle-icon">▶</span>
         </div>
-      `
-    } else {
-      html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Output</div>
-          <pre class="tool-output">${escapeHtml(output)}</pre>
-        </div>
-      `
-    }
+        <pre class="tool-output">${escapeHtml(output)}</pre>
+      </div>
+    `
   } else if (stateStatus === "pending") {
     if (shouldRenderCommandOutput) {
       html += `
@@ -429,7 +474,7 @@ function escapeHtml(text: string): string {
     console.log("[toggleToolSection] Current state:", isCollapsed, "section:", section.className)
     
     if (isCollapsed) {
-      section.removeAttribute("data-collapsed")
+      section.setAttribute("data-collapsed", "false")
     } else {
       section.setAttribute("data-collapsed", "true")
     }
@@ -439,7 +484,7 @@ function escapeHtml(text: string): string {
     
     const icon = toggle.querySelector(".toggle-icon") as HTMLElement
     if (icon) {
-      icon.textContent = isCollapsed ? "▼" : "▶"
+      icon.textContent = newState ? "▶" : "▼"
     }
   }
 }
@@ -465,7 +510,22 @@ window.addEventListener("message", (event) => {
 
       resetState()
 
-      messages = message.messages || []
+      const rawMessages = message.messages || []
+      console.log("[init] Processing", rawMessages.length, "raw messages")
+      
+      // Process messages to merge consecutive assistant messages
+      const processedMessages: any[] = []
+      rawMessages.forEach((msg: any) => {
+        const lastMsg = processedMessages[processedMessages.length - 1]
+        if (lastMsg && lastMsg.role === "assistant" && msg.role === "assistant") {
+          lastMsg.parts = [...(lastMsg.parts || []), ...(msg.parts || [])]
+          lastMsg.id = msg.id // Keep the latest ID
+        } else {
+          processedMessages.push({ ...msg })
+        }
+      })
+
+      messages = processedMessages
       messagesContainer.innerHTML = ""
       messages.forEach(renderMessage)
 
@@ -487,8 +547,26 @@ window.addEventListener("message", (event) => {
       if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
         break
       }
+      
+      // Check if we should merge this message into the previous one in the messages array
+      const lastMsg = messages[messages.length - 1]
+      const shouldMerge = lastMsg && 
+                        lastMsg.role === "assistant" && 
+                        message.role === "assistant"
+
+      console.log("[Webview] Received message, shouldMerge:", shouldMerge)
+
       renderMessage(message)
-      messages.push(message)
+
+      if (shouldMerge) {
+        // Merge parts into the last message
+        lastMsg.parts = [...(lastMsg.parts || []), ...(message.parts || [])]
+        // Update the ID to the latest one
+        lastMsg.id = message.id
+      } else {
+        messages.push(message)
+      }
+
       // Enable undo when new message arrives
       if (currentSessionId && !currentSessionId.startsWith("temp_")) {
         canUndo = true
@@ -501,6 +579,7 @@ window.addEventListener("message", (event) => {
       if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
         break
       }
+      console.log("[Webview] Received messagePart:", message.messageId, "partId:", message.partId || message.part?.id)
       updateMessagePart(message.messageId, message.partId || message.part?.id, message.part)
       break
 
@@ -707,7 +786,7 @@ function insertFileMention(path: string, lineRange?: string): void {
     let startNode: Text | null = null
     let startOffsetInNode = 0
     
-    const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false)
+    const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null)
     let textNode: Text | null = null
     
     while (textNode = walker.nextNode() as Text) {
@@ -778,7 +857,7 @@ function insertFileMention(path: string, lineRange?: string): void {
 
 function getOffsetOfNode(node: Node): number {
   let offset = 0
-  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false)
+  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null)
   let currentNode: Text | null = null
   while (currentNode = walker.nextNode() as Text) {
     if (currentNode === node) {
@@ -796,7 +875,7 @@ function getCursorPosition(): number {
   const range = selection.getRangeAt(0)
   let position = 0
   
-  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null, false)
+  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null)
   let textNode: Text | null = null
   while (textNode = walker.nextNode() as Text) {
     if (textNode === range.startContainer) {
@@ -845,7 +924,7 @@ messageInput.addEventListener("dblclick", (e) => {
 
 function getTextNodeAtOffset(root: Node, offset: number): Text | null {
   let currentOffset = 0
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false)
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
   
   let textNode: Text | null = null
   while (textNode = walker.nextNode() as Text) {
@@ -1163,7 +1242,7 @@ function sendMessage(): void {
 function getMessageText(): string {
   let text = ""
   
-  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false)
+  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null)
   
   let node: Node | null = null
   while (node = walker.nextNode()) {
