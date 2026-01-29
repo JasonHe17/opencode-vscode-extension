@@ -1,5 +1,24 @@
+import { marked } from "marked"
+import { markedHighlight } from "marked-highlight"
+import hljs from "highlight.js"
+
 declare const acquireVsCodeApi: () => any
 const vscodeApi = acquireVsCodeApi()
+
+marked.use(
+  markedHighlight({
+    langPrefix: "hljs language-",
+    highlight(code, lang) {
+      const language = hljs.getLanguage(lang) ? lang : "plaintext"
+      return hljs.highlight(code, { language }).value
+    }
+  })
+)
+
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
 
 function resetState(): void {
   messages = []
@@ -75,7 +94,6 @@ function renderMessage(message: any): void {
     if (part.type === "text") {
       const textDiv = renderTextPart(getPartContent(part))
       textDiv.setAttribute("data-part-id", part.id || "")
-      textDiv.className = "message-text"
       contentDiv.appendChild(textDiv)
     } else if (part.type === "tool") {
       console.log("[renderMessage] Rendering tool part:", part)
@@ -151,10 +169,10 @@ function createMessageElement(message: any): HTMLElement {
 }
 
 function renderTextPart(text: string): HTMLElement {
-  const pre = document.createElement("div")
-  pre.style.whiteSpace = "pre-wrap"
-  pre.textContent = text
-  return pre
+  const div = document.createElement("div")
+  div.className = "message-text"
+  div.innerHTML = marked.parse(text) as string
+  return div
 }
 
 function getPartContent(part: any): string {
@@ -179,10 +197,8 @@ function renderReasoningPart(content: any, container: HTMLElement): HTMLElement 
 
   if (content && typeof content === "object" && content.html) {
     textDiv.innerHTML = content.html
-  } else if (typeof content === "string") {
-    textDiv.textContent = content
-  } else if (typeof content === "number") {
-    textDiv.textContent = String(content)
+  } else {
+    textDiv.innerHTML = marked.parse(getPartContent({ content })) as string
   }
 
   reasoningDiv.appendChild(textDiv)
@@ -234,22 +250,20 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
     if (part.type === "reasoning") {
       const reasoningEl = contentDiv.querySelector(`.reasoning-container[data-part-id="${partId}"]`) as HTMLElement
       if (reasoningEl) {
-        const textDiv = reasoningEl.querySelector(".reasoning-content")
+        const textDiv = reasoningEl.querySelector(".reasoning-content") as HTMLElement
         if (textDiv) {
           if (part.content && typeof part.content === "object" && part.content.html) {
             textDiv.innerHTML = part.content.html
-          } else if (typeof part.content === "string") {
-            textDiv.textContent = part.content
-          } else if (typeof part.text === "string") {
-            textDiv.textContent = part.text
+          } else {
+            textDiv.innerHTML = marked.parse(getPartContent(part)) as string
           }
           reasoningEl.scrollTop = reasoningEl.scrollHeight
         }
       }
     } else if (part.type === "text") {
-      const textEl = contentDiv.querySelector(`.message-text[data-part-id="${partId}"]`)
+      const textEl = contentDiv.querySelector(`.message-text[data-part-id="${partId}"]`) as HTMLElement
       if (textEl) {
-        textEl.textContent = getPartContent(part)
+        textEl.innerHTML = marked.parse(getPartContent(part)) as string
       }
     }
   } else {
@@ -269,10 +283,8 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
       textDiv.className = "reasoning-content"
       if (part.content && typeof part.content === "object" && part.content.html) {
         textDiv.innerHTML = part.content.html
-      } else if (typeof part.content === "string") {
-        textDiv.textContent = part.content
-      } else if (typeof part.text === "string") {
-        textDiv.textContent = part.text
+      } else {
+        textDiv.innerHTML = marked.parse(getPartContent(part)) as string
       }
       reasoningDiv.appendChild(textDiv)
       
@@ -301,7 +313,6 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
 
       const textDiv = renderTextPart(getPartContent(part))
       textDiv.setAttribute("data-part-id", partId)
-      textDiv.className = "message-text"
       contentDiv.appendChild(textDiv)
     }
   }
@@ -623,22 +634,18 @@ window.addEventListener("message", (event) => {
     case "revertSuccess":
       console.log("[Webview] Revert successful", message)
       
-      // Remove deleted messages from UI
-      if (message.removedMessages) {
-        message.removedMessages.forEach((removedMsg: any) => {
-          const msgEl = messagesContainer.querySelector(`[data-message-id="${removedMsg.id}"]`)
-          if (msgEl) {
-            msgEl.remove()
-          }
-        })
-      }
+      // Clear current messages display
+      messagesContainer.innerHTML = ""
       
-      // Update local messages array
+      // Update local messages array to remaining messages
       if (message.remainingMessages) {
         messages = message.remainingMessages
       }
       
-      // Restore user message to input box
+      // Re-render all remaining messages
+      messages.forEach(renderMessage)
+      
+      // Restore user message to input box for editing
       if (message.userMessageToRestore) {
         messageInput.innerHTML = ""
         insertText(message.userMessageToRestore)
@@ -653,21 +660,16 @@ window.addEventListener("message", (event) => {
     case "unrevertSuccess":
       console.log("[Webview] Unrevert (redo) successful", message)
       
-      // Add restored messages back to UI
-      if (message.restoredMessages) {
-        message.restoredMessages.forEach((restoredMsg: any) => {
-          // Check if message already exists
-          const existingEl = messagesContainer.querySelector(`[data-message-id="${restoredMsg.id}"]`)
-          if (!existingEl) {
-            renderMessage(restoredMsg)
-          }
-        })
-      }
+      // Clear current messages display
+      messagesContainer.innerHTML = ""
       
-      // Update local messages array
+      // Update local messages array to all messages
       if (message.allMessages) {
         messages = message.allMessages
       }
+      
+      // Re-render all messages
+      messages.forEach(renderMessage)
       
       // Clear input box on redo (since we're restoring the conversation)
       messageInput.innerHTML = ""

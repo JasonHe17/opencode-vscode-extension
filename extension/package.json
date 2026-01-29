@@ -2,7 +2,7 @@
   "name": "opencode-gui",
   "displayName": "OpenCode",
   "description": "Graphical user interface for OpenCode AI",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "opencode-ai",
   "type": "module",
   "engines": {
@@ -307,6 +307,9 @@
     "typescript-eslint": "^8.53.0"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "../packages/opencode-sdk"
+    "@opencode-ai/sdk": "../packages/opencode-sdk",
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.1",
+    "marked-highlight": "^2.2.3"
   }
 }
