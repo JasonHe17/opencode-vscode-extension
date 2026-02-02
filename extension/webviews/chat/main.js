@@ -53080,9 +53080,11 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     breaks: true,
     gfm: true
   });
+  var currentAgentName = "OpenCode";
   function resetState() {
     messages = [];
     messagesContainer.innerHTML = "";
+    currentAgentName = "OpenCode";
   }
   var messagesContainer = document.getElementById("messages");
   var messageInput = document.getElementById("messageInput");
@@ -53100,6 +53102,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   var canRedo = false;
   var currentMention = null;
   agentSelect.addEventListener("change", () => {
+    currentAgentName = agentSelect.value || "OpenCode";
     postMessage({
       type: "changeAgent",
       agent: agentSelect.value
@@ -53176,26 +53179,49 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const messageDiv = document.createElement("div");
     messageDiv.className = `message ${message.role}`;
     messageDiv.setAttribute("data-message-id", message.id);
-    const headerDiv = document.createElement("div");
-    headerDiv.className = "message-header";
-    const iconSpan = document.createElement("span");
-    iconSpan.className = "message-icon";
-    iconSpan.textContent = message.role === "user" ? "\u{1F464}" : "\u{1F916}";
-    const roleSpan = document.createElement("span");
-    roleSpan.className = "message-role";
-    if (message.role === "user") {
-      roleSpan.textContent = "You";
-    } else {
-      const agentName = agentSelect.value || "OpenCode";
-      roleSpan.textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1);
+    if (message.role === "assistant") {
+      const agentHeader = document.createElement("div");
+      agentHeader.className = "agent-header";
+      const iconSpan = document.createElement("span");
+      iconSpan.className = "agent-icon";
+      iconSpan.textContent = getAgentIcon(currentAgentName);
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "agent-name";
+      const agentName = message.agent || currentAgentName || "OpenCode";
+      nameSpan.textContent = formatAgentName(agentName);
+      agentHeader.appendChild(iconSpan);
+      agentHeader.appendChild(nameSpan);
+      messageDiv.appendChild(agentHeader);
     }
-    headerDiv.appendChild(iconSpan);
-    headerDiv.appendChild(roleSpan);
-    messageDiv.appendChild(headerDiv);
     const contentDiv = document.createElement("div");
     contentDiv.className = "message-content";
     messageDiv.appendChild(contentDiv);
     return messageDiv;
+  }
+  function formatAgentName(name) {
+    if (name === "build") return "Build";
+    if (name === "test") return "Test";
+    if (name === "optimize") return "Optimize";
+    if (name === "explain") return "Explain";
+    if (name === "code") return "Code";
+    if (name === "architect") return "Architect";
+    if (name === "ask") return "Ask";
+    if (name === "debug") return "Debug";
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+  function getAgentIcon(agentName) {
+    const icons = {
+      build: "\u{1F528}",
+      test: "\u{1F9EA}",
+      optimize: "\u26A1",
+      explain: "\u{1F4D6}",
+      code: "\u{1F4BB}",
+      architect: "\u{1F3D7}\uFE0F",
+      ask: "\u2753",
+      debug: "\u{1F41B}",
+      default: "\u{1F916}"
+    };
+    return icons[agentName.toLowerCase()] || icons.default;
   }
   function renderTextPart(text) {
     const div = document.createElement("div");
@@ -53213,37 +53239,47 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const reasoningDiv = document.createElement("div");
     reasoningDiv.className = "reasoning-container";
     reasoningDiv.setAttribute("data-collapsed", "true");
-    const label = document.createElement("div");
-    label.className = "reasoning-header";
-    label.innerHTML = `<span class="reasoning-icon">\u{1F9E0}</span> \u601D\u8003\u8FC7\u7A0B <span class="collapse-icon">\u25BC</span>`;
-    reasoningDiv.appendChild(label);
-    const textDiv = document.createElement("div");
-    textDiv.className = "reasoning-content";
+    const toggle = document.createElement("div");
+    toggle.className = "reasoning-toggle";
+    toggle.innerHTML = `<span>\u601D\u8003\u8FC7\u7A0B</span><span class="reasoning-toggle-icon">\u25BC</span>`;
+    reasoningDiv.appendChild(toggle);
+    const contentDiv = document.createElement("div");
+    contentDiv.className = "reasoning-content";
     if (content && typeof content === "object" && content.html) {
-      textDiv.innerHTML = content.html;
+      contentDiv.innerHTML = content.html;
     } else {
-      textDiv.innerHTML = d.parse(getPartContent({ content }));
-    }
-    reasoningDiv.appendChild(textDiv);
-    label.addEventListener("click", (e) => {
-      const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true";
-      if (isCollapsed) {
-        reasoningDiv.setAttribute("data-collapsed", "false");
+      const contentText = getPartContent({ content });
+      const thoughts = parseThoughts(contentText);
+      if (thoughts.length > 0) {
+        contentDiv.innerHTML = thoughts.map((t) => `
+        <div class="thought-item">
+          <span class="thought-icon">\u{1F4AD}</span>
+          <div class="thought-content">${d.parse(t)}</div>
+        </div>
+      `).join("");
       } else {
-        reasoningDiv.setAttribute("data-collapsed", "true");
+        contentDiv.innerHTML = d.parse(contentText);
       }
-      updateCollapseIcon(reasoningDiv);
+    }
+    reasoningDiv.appendChild(contentDiv);
+    toggle.addEventListener("click", (e) => {
+      const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true";
+      reasoningDiv.setAttribute("data-collapsed", isCollapsed ? "false" : "true");
       e.stopPropagation();
     });
     container.appendChild(reasoningDiv);
     return reasoningDiv;
   }
-  function updateCollapseIcon(reasoningDiv) {
-    const icon = reasoningDiv.querySelector(".collapse-icon");
-    if (icon) {
-      const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true";
-      icon.textContent = isCollapsed ? "\u25BC" : "\u25B2";
+  function parseThoughts(content) {
+    const patterns = [
+      /(?:Thought:|思考:|💭)\s*(.+?)(?=(?:Thought:|思考:|💭|$))/gs,
+      /(?:^|\n)\s*[-=]{3,}\s*\n?/g
+    ];
+    const parts = content.split(/(?:\n|^)\s*(?:Thought:|思考:|💭)\s*/).filter((p) => p.trim());
+    if (parts.length > 1) {
+      return parts.map((p) => p.trim());
     }
+    return content.trim() ? [content] : [];
   }
   function updateMessagePart(messageId, partId, part) {
     if (!partId) return;
@@ -53271,9 +53307,19 @@ Please report this to https://github.com/markedjs/marked.`, e) {
             if (part.content && typeof part.content === "object" && part.content.html) {
               textDiv.innerHTML = part.content.html;
             } else {
-              textDiv.innerHTML = d.parse(getPartContent(part));
+              const contentText = getPartContent(part);
+              const thoughts = parseThoughts(contentText);
+              if (thoughts.length > 0) {
+                textDiv.innerHTML = thoughts.map((t) => `
+                <div class="thought-item">
+                  <span class="thought-icon">\u{1F4AD}</span>
+                  <div class="thought-content">${d.parse(t)}</div>
+                </div>
+              `).join("");
+              } else {
+                textDiv.innerHTML = d.parse(contentText);
+              }
             }
-            reasoningEl.scrollTop = reasoningEl.scrollHeight;
           }
         }
       } else if (part.type === "text") {
@@ -53285,42 +53331,14 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     } else {
       message.parts.push(part);
       if (part.type === "reasoning") {
-        const reasoningDiv = document.createElement("div");
-        reasoningDiv.className = "reasoning-container";
-        reasoningDiv.setAttribute("data-part-id", partId);
-        reasoningDiv.setAttribute("data-collapsed", "true");
-        const label = document.createElement("div");
-        label.className = "reasoning-header";
-        label.innerHTML = `<span class="reasoning-icon">\u{1F9E0}</span> \u601D\u8003\u8FC7\u7A0B <span class="collapse-icon">\u25BC</span>`;
-        reasoningDiv.appendChild(label);
-        const textDiv = document.createElement("div");
-        textDiv.className = "reasoning-content";
-        if (part.content && typeof part.content === "object" && part.content.html) {
-          textDiv.innerHTML = part.content.html;
-        } else {
-          textDiv.innerHTML = d.parse(getPartContent(part));
-        }
-        reasoningDiv.appendChild(textDiv);
-        label.addEventListener("click", (e) => {
-          const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true";
-          if (isCollapsed) {
-            reasoningDiv.setAttribute("data-collapsed", "false");
-          } else {
-            reasoningDiv.setAttribute("data-collapsed", "true");
-          }
-          updateCollapseIcon(reasoningDiv);
-          e.stopPropagation();
-        });
-        contentDiv.appendChild(reasoningDiv);
+        renderReasoningPart(getPartContent(part), contentDiv);
       } else if (part.type === "tool" && part.content) {
         contentDiv.querySelectorAll(".reasoning-container").forEach((r) => r.setAttribute("data-collapsed", "true"));
-        contentDiv.querySelectorAll(".reasoning-container").forEach((r) => updateCollapseIcon(r));
-        const toolDiv = document.createElement("div");
-        toolDiv.innerHTML = constructToolHtml(part.content);
+        const toolDiv = renderToolExecution(part.content);
+        toolDiv.setAttribute("data-part-id", partId);
         contentDiv.appendChild(toolDiv);
       } else if (part.type === "text") {
         contentDiv.querySelectorAll(".reasoning-container").forEach((r) => r.setAttribute("data-collapsed", "true"));
-        contentDiv.querySelectorAll(".reasoning-container").forEach((r) => updateCollapseIcon(r));
         const textDiv = renderTextPart(getPartContent(part));
         textDiv.setAttribute("data-part-id", partId);
         contentDiv.appendChild(textDiv);
@@ -53331,110 +53349,88 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   function renderToolExecution(content) {
     const div = document.createElement("div");
     try {
-      const toolHtml = content.html || constructToolHtml(content);
+      const toolHtml = constructToolHtml(content);
       div.innerHTML = toolHtml;
+      div.querySelectorAll(".tool-output-header").forEach((header) => {
+        header.addEventListener("click", () => {
+          const container = header.parentElement;
+          if (container) {
+            const isCollapsed = container.getAttribute("data-collapsed") === "true";
+            container.setAttribute("data-collapsed", isCollapsed ? "false" : "true");
+          }
+        });
+      });
     } catch (error) {
       console.error("[renderToolExecution] Error rendering tool:", error, content);
-      div.innerHTML = `<div class="tool-execution tool-error">
+      div.innerHTML = `<div class="tool-item">
       <div class="tool-header">
         <span class="tool-icon">\u26A0\uFE0F</span>
         <span class="tool-name">Error rendering tool</span>
       </div>
-      <pre class="tool-output">${escapeHtml(String(content) || "Unknown error")}</pre>
+      <div class="tool-output">${escapeHtml(String(content) || "Unknown error")}</div>
     </div>`;
     }
-    return div;
+    return div.firstElementChild || div;
   }
   function constructToolHtml(content) {
     console.log("[constructToolHtml] Input content:", JSON.stringify(content, null, 2));
     const state = content.state || content;
     const toolName = content.tool || content.toolName || content.toolData?.name || "Unknown Tool";
-    const stateStatus = state?.status || "pending";
+    const stateStatus = state?.status || content.status || "pending";
     const title = state?.title || content.title || "";
     const output = state?.output || content.output || "";
     const error = state?.error || content.error || "";
     const toolInput = state?.input || content.input || {};
-    const stateIcons = {
-      pending: "\u23F3",
-      running: "\u{1F504}",
-      completed: "\u2713",
-      error: "\u2717"
+    const autoRun = content.approval === "auto" || content.autoRun;
+    const statusLabels = {
+      pending: "\u7B49\u5F85\u4E2D",
+      running: "\u8FD0\u884C\u4E2D",
+      completed: "\u5DF2\u5B8C\u6210",
+      error: "\u9519\u8BEF"
     };
     const icon = getToolIcon(toolName);
-    const stateIcon = stateIcons[stateStatus] || "\u23F3";
+    const statusText = statusLabels[stateStatus] || stateStatus;
     let html = `
-    <div class="tool-execution" data-state="${stateStatus}">
+    <div class="tool-item" data-state="${stateStatus}">
       <div class="tool-header">
         <span class="tool-icon">${icon}</span>
-        <span class="tool-name">${escapeHtml(toolName)}</span>
-        <span class="tool-state">${stateIcon}</span>
+        <span class="tool-name">${escapeHtml(title || toolName)}</span>
+        <span class="tool-status ${stateStatus}">${statusText}</span>
       </div>
   `;
-    if (title) {
-      html += `<div class="tool-title">${escapeHtml(title)}</div>`;
-    }
-    const shouldRenderCommandOutput = toolName === "bash" && toolInput?.command || (toolInput?.command || toolInput?.description || toolInput?.location);
-    if (shouldRenderCommandOutput) {
+    const command = toolInput?.command || toolInput?.cmd || toolInput?.description || toolInput?.location || "";
+    if (command) {
       html += `
-      <div class="tool-content">
-        <div class="tool-command-section">
-          <pre class="tool-command">${escapeHtml(toolInput.command || toolInput.description || toolInput.location || "")}</pre>
-        </div>
+      <div class="tool-command-bar">
+        <code class="tool-command">$ ${escapeHtml(command)}</code>
+        ${autoRun ? '<span class="tool-auto-run">\u26A1 \u81EA\u52A8\u8FD0\u884C</span>' : ""}
+      </div>
     `;
     }
-    if (stateStatus === "error" && error) {
-      if (shouldRenderCommandOutput) {
-        html += `
-        <div class="tool-output-section" data-collapsed="true">
-          <div class="output-toggle" onclick="toggleToolSection(this)">
-            <span class="tool-output-label">Error</span>
-            <span class="toggle-icon">\u25B6</span>
-          </div>
-          <pre class="tool-output tool-error">${escapeHtml(error)}</pre>
-        </div>
-      `;
-      } else {
-        html += `
-        <div class="tool-error">
-          <pre>${escapeHtml(error)}</pre>
-        </div>
-      `;
-      }
-    } else if (output) {
+    if (output || error) {
+      const displayOutput = error || output;
+      const label = error ? "\u9519\u8BEF" : "\u8F93\u51FA";
       html += `
-      <div class="tool-output-section" data-collapsed="true">
-        <div class="output-toggle" onclick="toggleToolSection(this)">
-          <span class="tool-output-label">Output</span>
-          <span class="toggle-icon">\u25B6</span>
+      <div class="tool-output-container" data-collapsed="true">
+        <div class="tool-output-header">
+          <span>${label}</span>
+          <span class="tool-output-toggle">\u25BC</span>
         </div>
-        <pre class="tool-output">${escapeHtml(output)}</pre>
+        <pre class="tool-output ${error ? "tool-error" : ""}">${escapeHtml(displayOutput)}</pre>
       </div>
     `;
     } else if (stateStatus === "pending") {
-      if (shouldRenderCommandOutput) {
-        html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Output</div>
-          <div class="tool-pending">Waiting for execution...</div>
-        </div>
-      `;
-      } else {
-        html += `<div class="tool-pending">Waiting for execution...</div>`;
-      }
+      html += `
+      <div class="tool-output-container">
+        <div class="tool-output" style="color: var(--vscode-descriptionForeground);">\u7B49\u5F85\u6267\u884C...</div>
+      </div>
+    `;
     } else if (stateStatus === "running") {
-      if (shouldRenderCommandOutput) {
-        html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Output</div>
-          <div class="tool-running">Executing...</div>
-        </div>
-      `;
-      } else {
-        html += `<div class="tool-running">Executing...</div>`;
-      }
-    }
-    if (shouldRenderCommandOutput) {
-      html += `</div>`;
+      html += `
+      <div class="tool-output-container">
+        <div class="tool-output" style="color: var(--vscode-descriptionForeground);">\u6267\u884C\u4E2D...</div>
+      </div>
+    `;
     }
     html += `</div>`;
     return html;
@@ -53442,9 +53438,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   function getToolIcon(toolName) {
     const icons = {
       bash: "\u{1F4BB}",
+      shell: "\u{1F4BB}",
+      cmd: "\u{1F4BB}",
       read: "\u{1F4C4}",
       write: "\u{1F4DD}",
       edit: "\u270F\uFE0F",
+      search: "\u{1F50D}",
       glob: "\u{1F50D}",
       grep: "\u{1F50E}",
       webfetch: "\u{1F310}",
@@ -53452,44 +53451,18 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       codesearch: "\u{1F50D}",
       task: "\u{1F527}",
       question: "\u2753",
+      file: "\u{1F4C1}",
+      dir: "\u{1F4C2}",
+      folder: "\u{1F4C2}",
       default: "\u{1F527}"
     };
-    return icons[toolName] || icons.default;
+    return icons[toolName.toLowerCase()] || icons.default;
   }
   function escapeHtml(text) {
-    const escaped = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    };
-    return text.replace(/[&<>"']/g, (char) => escaped[char]);
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
   }
-  window.toggleToolSection = function(toggle) {
-    const section = toggle.parentElement;
-    if (section) {
-      const isCollapsed = section.getAttribute("data-collapsed") === "true";
-      console.log("[toggleToolSection] Current state:", isCollapsed, "section:", section.className);
-      if (isCollapsed) {
-        section.setAttribute("data-collapsed", "false");
-      } else {
-        section.setAttribute("data-collapsed", "true");
-      }
-      const newState = section.getAttribute("data-collapsed") === "true";
-      console.log("[toggleToolSection] New state:", newState);
-      const icon = toggle.querySelector(".toggle-icon");
-      if (icon) {
-        icon.textContent = newState ? "\u25B6" : "\u25BC";
-      }
-    }
-  };
-  window.toggleToolOutput = function(toggle) {
-    const content = toggle.parentElement;
-    if (content) {
-      content.toggleAttribute("data-collapsed");
-    }
-  };
   window.addEventListener("message", (event) => {
     const message = event.data;
     console.log("[Webview] Received message type:", message.type);
@@ -53498,6 +53471,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         console.log("[init] Switching to session:", message.sessionId, "Previous:", currentSessionId);
         currentSessionId = message.sessionId || null;
         currentSessionTitle = message.sessionTitle || "New Session";
+        if (message.agent) {
+          currentAgentName = message.agent;
+        }
         const titleEl = document.getElementById("sessionTitle");
         if (titleEl) titleEl.textContent = currentSessionTitle;
         resetState();
@@ -53509,6 +53485,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
           if (lastMsg2 && lastMsg2.role === "assistant" && msg.role === "assistant") {
             lastMsg2.parts = [...lastMsg2.parts || [], ...msg.parts || []];
             lastMsg2.id = msg.id;
+            if (msg.agent) lastMsg2.agent = msg.agent;
           } else {
             processedMessages.push({ ...msg });
           }
@@ -53530,6 +53507,9 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         if (message.sessionId && currentSessionId && message.sessionId !== currentSessionId) {
           break;
         }
+        if (message.agent) {
+          currentAgentName = message.agent;
+        }
         const lastMsg = messages[messages.length - 1];
         const shouldMerge = lastMsg && lastMsg.role === "assistant" && message.role === "assistant";
         console.log("[Webview] Received message, shouldMerge:", shouldMerge);
@@ -53537,6 +53517,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         if (shouldMerge) {
           lastMsg.parts = [...lastMsg.parts || [], ...message.parts || []];
           lastMsg.id = message.id;
+          if (message.agent) lastMsg.agent = message.agent;
         } else {
           messages.push(message);
         }
@@ -53568,7 +53549,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       case "sessionIdle":
         messagesContainer.querySelectorAll(".reasoning-container").forEach((r) => {
           r.setAttribute("data-collapsed", "true");
-          updateCollapseIcon(r);
         });
         break;
       case "fileSuggestions":
@@ -53625,7 +53605,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     agents.forEach((agent) => {
       const option = document.createElement("option");
       option.value = agent;
-      option.textContent = agent;
+      option.textContent = formatAgentName(agent);
       if (agent === currentAgent) option.selected = true;
       agentSelect.appendChild(option);
     });
@@ -53772,6 +53752,19 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       selectMention(mentionElement);
     }
   });
+  function findMentionElement(node) {
+    let current = node;
+    while (current && current !== messageInput) {
+      if (current.nodeType === Node.ELEMENT_NODE) {
+        const el = current;
+        if (el.classList?.contains("file-mention")) {
+          return el;
+        }
+      }
+      current = current.parentNode;
+    }
+    return null;
+  }
   function insertText(text) {
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) {
@@ -53976,19 +53969,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       e.preventDefault();
       parent.remove();
     }
-  }
-  function findMentionElement(node) {
-    let current = node;
-    while (current && current !== messageInput) {
-      if (current.nodeType === Node.ELEMENT_NODE) {
-        const el = current;
-        if (el.classList?.contains("file-mention")) {
-          return el;
-        }
-      }
-      current = current.parentNode;
-    }
-    return null;
   }
   function sendMessage() {
     const text = getMessageText().trim();

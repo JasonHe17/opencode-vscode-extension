@@ -20,9 +20,13 @@ marked.setOptions({
   gfm: true
 })
 
+// 当前 session 的 agent 名称
+let currentAgentName = "OpenCode"
+
 function resetState(): void {
   messages = []
   messagesContainer.innerHTML = ""
+  currentAgentName = "OpenCode"
 }
 
 const messagesContainer = document.getElementById("messages")!
@@ -45,6 +49,7 @@ let canRedo = false
 let currentMention: { startOffset: number; searchTerm: string; textBefore: string; savedRange: Range } | null = null
 
 agentSelect.addEventListener("change", () => {
+  currentAgentName = agentSelect.value || "OpenCode"
   postMessage({
     type: "changeAgent",
     agent: agentSelect.value
@@ -66,7 +71,6 @@ function renderMessage(message: any): void {
   console.log("[renderMessage] Rendering message:", message.id, "role:", message.role)
   
   // Check if we should merge this message with the previous one
-  // Note: When called from init, messages array is already merged, so we check the DOM instead
   const lastMsgEl = messagesContainer.lastElementChild as HTMLElement
   const isLastAssistant = lastMsgEl && lastMsgEl.classList.contains("assistant")
   
@@ -80,7 +84,6 @@ function renderMessage(message: any): void {
   if (shouldMerge) {
     messageDiv = lastMsgEl
     contentDiv = messageDiv.querySelector(".message-content") as HTMLElement
-    // Update the ID to the latest one so subsequent parts can find it
     messageDiv.setAttribute("data-message-id", message.id)
     console.log("[renderMessage] Merged into existing element, new ID:", message.id)
   } else {
@@ -108,7 +111,7 @@ function renderMessage(message: any): void {
     }
   })
 
-  // Add message actions (undo button) for user messages
+  // Add message actions for user messages
   if (message.role === "user" && currentSessionId && !currentSessionId.startsWith("temp_")) {
     const actionsDiv = document.createElement("div")
     actionsDiv.className = "message-actions"
@@ -140,32 +143,60 @@ function createMessageElement(message: any): HTMLElement {
   messageDiv.className = `message ${message.role}`
   messageDiv.setAttribute("data-message-id", message.id)
 
-  const headerDiv = document.createElement("div")
-  headerDiv.className = "message-header"
-  
-  const iconSpan = document.createElement("span")
-  iconSpan.className = "message-icon"
-  iconSpan.textContent = message.role === "user" ? "👤" : "🤖"
-  
-  const roleSpan = document.createElement("span")
-  roleSpan.className = "message-role"
-  if (message.role === "user") {
-    roleSpan.textContent = "You"
-  } else {
-    // Use agent name if available, otherwise default to OpenCode
-    const agentName = agentSelect.value || "OpenCode"
-    roleSpan.textContent = agentName.charAt(0).toUpperCase() + agentName.slice(1)
+  // 添加 Agent Header (仅 assistant 消息)
+  if (message.role === "assistant") {
+    const agentHeader = document.createElement("div")
+    agentHeader.className = "agent-header"
+    
+    const iconSpan = document.createElement("span")
+    iconSpan.className = "agent-icon"
+    iconSpan.textContent = getAgentIcon(currentAgentName)
+    
+    const nameSpan = document.createElement("span")
+    nameSpan.className = "agent-name"
+    // 使用消息中的 agent 名称或当前选中的 agent
+    const agentName = message.agent || currentAgentName || "OpenCode"
+    nameSpan.textContent = formatAgentName(agentName)
+    
+    agentHeader.appendChild(iconSpan)
+    agentHeader.appendChild(nameSpan)
+    messageDiv.appendChild(agentHeader)
   }
-  
-  headerDiv.appendChild(iconSpan)
-  headerDiv.appendChild(roleSpan)
-  messageDiv.appendChild(headerDiv)
 
   const contentDiv = document.createElement("div")
   contentDiv.className = "message-content"
   messageDiv.appendChild(contentDiv)
 
   return messageDiv
+}
+
+function formatAgentName(name: string): string {
+  // 将 snake_case 或 camelCase 转换为显示名称
+  if (name === "build") return "Build"
+  if (name === "test") return "Test"
+  if (name === "optimize") return "Optimize"
+  if (name === "explain") return "Explain"
+  if (name === "code") return "Code"
+  if (name === "architect") return "Architect"
+  if (name === "ask") return "Ask"
+  if (name === "debug") return "Debug"
+  // 首字母大写
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+function getAgentIcon(agentName: string): string {
+  const icons: Record<string, string> = {
+    build: "🔨",
+    test: "🧪",
+    optimize: "⚡",
+    explain: "📖",
+    code: "💻",
+    architect: "🏗️",
+    ask: "❓",
+    debug: "🐛",
+    default: "🤖"
+  }
+  return icons[agentName.toLowerCase()] || icons.default
 }
 
 function renderTextPart(text: string): HTMLElement {
@@ -187,30 +218,37 @@ function renderReasoningPart(content: any, container: HTMLElement): HTMLElement 
   reasoningDiv.className = "reasoning-container"
   reasoningDiv.setAttribute("data-collapsed", "true")
 
-  const label = document.createElement("div")
-  label.className = "reasoning-header"
-  label.innerHTML = `<span class="reasoning-icon">🧠</span> 思考过程 <span class="collapse-icon">▼</span>`
-  reasoningDiv.appendChild(label)
+  const toggle = document.createElement("div")
+  toggle.className = "reasoning-toggle"
+  toggle.innerHTML = `<span>思考过程</span><span class="reasoning-toggle-icon">▼</span>`
+  reasoningDiv.appendChild(toggle)
 
-  const textDiv = document.createElement("div")
-  textDiv.className = "reasoning-content"
-
+  const contentDiv = document.createElement("div")
+  contentDiv.className = "reasoning-content"
+  
   if (content && typeof content === "object" && content.html) {
-    textDiv.innerHTML = content.html
+    contentDiv.innerHTML = content.html
   } else {
-    textDiv.innerHTML = marked.parse(getPartContent({ content })) as string
+    const contentText = getPartContent({ content })
+    // 解析思考内容，支持多个 thought 步骤
+    const thoughts = parseThoughts(contentText)
+    if (thoughts.length > 0) {
+      contentDiv.innerHTML = thoughts.map(t => `
+        <div class="thought-item">
+          <span class="thought-icon">💭</span>
+          <div class="thought-content">${marked.parse(t)}</div>
+        </div>
+      `).join("")
+    } else {
+      contentDiv.innerHTML = marked.parse(contentText) as string
+    }
   }
 
-  reasoningDiv.appendChild(textDiv)
+  reasoningDiv.appendChild(contentDiv)
 
-  label.addEventListener("click", (e) => {
+  toggle.addEventListener("click", (e) => {
     const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
-    if (isCollapsed) {
-      reasoningDiv.setAttribute("data-collapsed", "false")
-    } else {
-      reasoningDiv.setAttribute("data-collapsed", "true")
-    }
-    updateCollapseIcon(reasoningDiv)
+    reasoningDiv.setAttribute("data-collapsed", isCollapsed ? "false" : "true")
     e.stopPropagation()
   })
 
@@ -218,12 +256,22 @@ function renderReasoningPart(content: any, container: HTMLElement): HTMLElement 
   return reasoningDiv
 }
 
-function updateCollapseIcon(reasoningDiv: HTMLElement): void {
-  const icon = reasoningDiv.querySelector(".collapse-icon") as HTMLElement
-  if (icon) {
-    const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
-    icon.textContent = isCollapsed ? "▼" : "▲"
+function parseThoughts(content: string): string[] {
+  // 尝试解析多个思考步骤
+  // 支持 "Thought:" 或 "思考:" 或 "---" 分隔符
+  const patterns = [
+    /(?:Thought:|思考:|💭)\s*(.+?)(?=(?:Thought:|思考:|💭|$))/gs,
+    /(?:^|\n)\s*[-=]{3,}\s*\n?/g
+  ]
+  
+  // 先尝试按分隔符分割
+  const parts = content.split(/(?:\n|^)\s*(?:Thought:|思考:|💭)\s*/).filter(p => p.trim())
+  if (parts.length > 1) {
+    return parts.map(p => p.trim())
   }
+  
+  // 如果没有明确分隔，返回整个内容
+  return content.trim() ? [content] : []
 }
 
 function updateMessagePart(messageId: string, partId: string, part: any): void {
@@ -255,9 +303,19 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
           if (part.content && typeof part.content === "object" && part.content.html) {
             textDiv.innerHTML = part.content.html
           } else {
-            textDiv.innerHTML = marked.parse(getPartContent(part)) as string
+            const contentText = getPartContent(part)
+            const thoughts = parseThoughts(contentText)
+            if (thoughts.length > 0) {
+              textDiv.innerHTML = thoughts.map(t => `
+                <div class="thought-item">
+                  <span class="thought-icon">💭</span>
+                  <div class="thought-content">${marked.parse(t)}</div>
+                </div>
+              `).join("")
+            } else {
+              textDiv.innerHTML = marked.parse(contentText) as string
+            }
           }
-          reasoningEl.scrollTop = reasoningEl.scrollHeight
         }
       }
     } else if (part.type === "text") {
@@ -269,47 +327,16 @@ function updateMessagePart(messageId: string, partId: string, part: any): void {
   } else {
     message.parts.push(part)
     if (part.type === "reasoning") {
-      const reasoningDiv = document.createElement("div")
-      reasoningDiv.className = "reasoning-container"
-      reasoningDiv.setAttribute("data-part-id", partId)
-      reasoningDiv.setAttribute("data-collapsed", "true")
-      
-      const label = document.createElement("div")
-      label.className = "reasoning-header"
-      label.innerHTML = `<span class="reasoning-icon">🧠</span> 思考过程 <span class="collapse-icon">▼</span>`
-      reasoningDiv.appendChild(label)
-
-      const textDiv = document.createElement("div")
-      textDiv.className = "reasoning-content"
-      if (part.content && typeof part.content === "object" && part.content.html) {
-        textDiv.innerHTML = part.content.html
-      } else {
-        textDiv.innerHTML = marked.parse(getPartContent(part)) as string
-      }
-      reasoningDiv.appendChild(textDiv)
-      
-      label.addEventListener("click", (e) => {
-        const isCollapsed = reasoningDiv.getAttribute("data-collapsed") === "true"
-        if (isCollapsed) {
-          reasoningDiv.setAttribute("data-collapsed", "false")
-        } else {
-          reasoningDiv.setAttribute("data-collapsed", "true")
-        }
-        updateCollapseIcon(reasoningDiv)
-        e.stopPropagation()
-      })
-      
-      contentDiv.appendChild(reasoningDiv)
+      renderReasoningPart(getPartContent(part), contentDiv as HTMLElement)
     } else if (part.type === "tool" && part.content) {
+      // Auto-collapse reasoning when tool appears
       contentDiv.querySelectorAll(".reasoning-container").forEach(r => r.setAttribute("data-collapsed", "true"))
-      contentDiv.querySelectorAll(".reasoning-container").forEach(r => updateCollapseIcon(r as HTMLElement))
       
-      const toolDiv = document.createElement("div")
-      toolDiv.innerHTML = constructToolHtml(part.content)
+      const toolDiv = renderToolExecution(part.content)
+      toolDiv.setAttribute("data-part-id", partId)
       contentDiv.appendChild(toolDiv)
     } else if (part.type === "text") {
       contentDiv.querySelectorAll(".reasoning-container").forEach(r => r.setAttribute("data-collapsed", "true"))
-      contentDiv.querySelectorAll(".reasoning-container").forEach(r => updateCollapseIcon(r as HTMLElement))
 
       const textDiv = renderTextPart(getPartContent(part))
       textDiv.setAttribute("data-part-id", partId)
@@ -324,20 +351,31 @@ function renderToolExecution(content: any): HTMLElement {
   const div = document.createElement("div")
   
   try {
-    const toolHtml = content.html || constructToolHtml(content)
+    const toolHtml = constructToolHtml(content)
     div.innerHTML = toolHtml
+    
+    // 绑定输出折叠事件
+    div.querySelectorAll(".tool-output-header").forEach(header => {
+      header.addEventListener("click", () => {
+        const container = header.parentElement as HTMLElement
+        if (container) {
+          const isCollapsed = container.getAttribute("data-collapsed") === "true"
+          container.setAttribute("data-collapsed", isCollapsed ? "false" : "true")
+        }
+      })
+    })
   } catch (error) {
     console.error("[renderToolExecution] Error rendering tool:", error, content)
-    div.innerHTML = `<div class="tool-execution tool-error">
+    div.innerHTML = `<div class="tool-item">
       <div class="tool-header">
         <span class="tool-icon">⚠️</span>
         <span class="tool-name">Error rendering tool</span>
       </div>
-      <pre class="tool-output">${escapeHtml(String(content) || "Unknown error")}</pre>
+      <div class="tool-output">${escapeHtml(String(content) || "Unknown error")}</div>
     </div>`
   }
   
-  return div
+  return div.firstElementChild as HTMLElement || div
 }
 
 function constructToolHtml(content: any): string {
@@ -347,101 +385,70 @@ function constructToolHtml(content: any): string {
   
   const toolName = content.tool || content.toolName || content.toolData?.name || "Unknown Tool"
   
-  const stateStatus = state?.status || "pending"
+  const stateStatus = state?.status || content.status || "pending"
   const title = state?.title || content.title || ""
   const output = state?.output || content.output || ""
   const error = state?.error || content.error || ""
   const toolInput = state?.input || content.input || {}
+  const autoRun = content.approval === "auto" || content.autoRun
   
-  const stateIcons = {
-    pending: "⏳",
-    running: "🔄",
-    completed: "✓",
-    error: "✗"
+  // 状态标签显示
+  const statusLabels: Record<string, string> = {
+    pending: "等待中",
+    running: "运行中",
+    completed: "已完成",
+    error: "错误"
   }
   
   const icon = getToolIcon(toolName)
-  const stateIcon = stateIcons[stateStatus as keyof typeof stateIcons] || "⏳"
+  const statusText = statusLabels[stateStatus] || stateStatus
   
   let html = `
-    <div class="tool-execution" data-state="${stateStatus}">
+    <div class="tool-item" data-state="${stateStatus}">
       <div class="tool-header">
         <span class="tool-icon">${icon}</span>
-        <span class="tool-name">${escapeHtml(toolName)}</span>
-        <span class="tool-state">${stateIcon}</span>
+        <span class="tool-name">${escapeHtml(title || toolName)}</span>
+        <span class="tool-status ${stateStatus}">${statusText}</span>
       </div>
   `
   
-  if (title) {
-    html += `<div class="tool-title">${escapeHtml(title)}</div>`
-  }
-  
-  const shouldRenderCommandOutput = (toolName === "bash" && toolInput?.command) ||
-                                    (toolInput?.command || toolInput?.description || toolInput?.location)
-  
-  if (shouldRenderCommandOutput) {
+  // 命令栏
+  const command = toolInput?.command || toolInput?.cmd || toolInput?.description || toolInput?.location || ""
+  if (command) {
     html += `
-      <div class="tool-content">
-        <div class="tool-command-section">
-          <pre class="tool-command">${escapeHtml(toolInput.command || toolInput.description || toolInput.location || "")}</pre>
-        </div>
+      <div class="tool-command-bar">
+        <code class="tool-command">$ ${escapeHtml(command)}</code>
+        ${autoRun ? '<span class="tool-auto-run">⚡ 自动运行</span>' : ''}
+      </div>
     `
   }
   
-  if (stateStatus === "error" && error) {
-    if (shouldRenderCommandOutput) {
-      html += `
-        <div class="tool-output-section" data-collapsed="true">
-          <div class="output-toggle" onclick="toggleToolSection(this)">
-            <span class="tool-output-label">Error</span>
-            <span class="toggle-icon">▶</span>
-          </div>
-          <pre class="tool-output tool-error">${escapeHtml(error)}</pre>
-        </div>
-      `
-    } else {
-      html += `
-        <div class="tool-error">
-          <pre>${escapeHtml(error)}</pre>
-        </div>
-      `
-    }
-  } else if (output) {
+  // 输出区域
+  if (output || error) {
+    const displayOutput = error || output
+    const label = error ? "错误" : "输出"
+    
     html += `
-      <div class="tool-output-section" data-collapsed="true">
-        <div class="output-toggle" onclick="toggleToolSection(this)">
-          <span class="tool-output-label">Output</span>
-          <span class="toggle-icon">▶</span>
+      <div class="tool-output-container" data-collapsed="true">
+        <div class="tool-output-header">
+          <span>${label}</span>
+          <span class="tool-output-toggle">▼</span>
         </div>
-        <pre class="tool-output">${escapeHtml(output)}</pre>
+        <pre class="tool-output ${error ? 'tool-error' : ''}">${escapeHtml(displayOutput)}</pre>
       </div>
     `
   } else if (stateStatus === "pending") {
-    if (shouldRenderCommandOutput) {
-      html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Output</div>
-          <div class="tool-pending">Waiting for execution...</div>
-        </div>
-      `
-    } else {
-      html += `<div class="tool-pending">Waiting for execution...</div>`
-    }
+    html += `
+      <div class="tool-output-container">
+        <div class="tool-output" style="color: var(--vscode-descriptionForeground);">等待执行...</div>
+      </div>
+    `
   } else if (stateStatus === "running") {
-    if (shouldRenderCommandOutput) {
-      html += `
-        <div class="tool-output-section">
-          <div class="tool-output-label">Output</div>
-          <div class="tool-running">Executing...</div>
-        </div>
-      `
-    } else {
-      html += `<div class="tool-running">Executing...</div>`
-    }
-  }
-  
-  if (shouldRenderCommandOutput) {
-    html += `</div>`
+    html += `
+      <div class="tool-output-container">
+        <div class="tool-output" style="color: var(--vscode-descriptionForeground);">执行中...</div>
+      </div>
+    `
   }
   
   html += `</div>`
@@ -452,9 +459,12 @@ function constructToolHtml(content: any): string {
 function getToolIcon(toolName: string): string {
   const icons: Record<string, string> = {
     bash: "💻",
+    shell: "💻",
+    cmd: "💻",
     read: "📄",
     write: "📝",
     edit: "✏️",
+    search: "🔍",
     glob: "🔍",
     grep: "🔎",
     webfetch: "🌐",
@@ -462,49 +472,18 @@ function getToolIcon(toolName: string): string {
     codesearch: "🔍",
     task: "🔧",
     question: "❓",
+    file: "📁",
+    dir: "📂",
+    folder: "📂",
     default: "🔧"
   }
-  return icons[toolName] || icons.default
+  return icons[toolName.toLowerCase()] || icons.default
 }
 
 function escapeHtml(text: string): string {
-  const escaped: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;"
-  }
-  return text.replace(/[&<>"']/g, (char) => escaped[char as keyof typeof escaped])
-}
-
-;(window as any).toggleToolSection = function(toggle: HTMLElement): void {
-  const section = toggle.parentElement as HTMLElement
-  if (section) {
-    const isCollapsed = section.getAttribute("data-collapsed") === "true"
-    console.log("[toggleToolSection] Current state:", isCollapsed, "section:", section.className)
-    
-    if (isCollapsed) {
-      section.setAttribute("data-collapsed", "false")
-    } else {
-      section.setAttribute("data-collapsed", "true")
-    }
-    
-    const newState = section.getAttribute("data-collapsed") === "true"
-    console.log("[toggleToolSection] New state:", newState)
-    
-    const icon = toggle.querySelector(".toggle-icon") as HTMLElement
-    if (icon) {
-      icon.textContent = newState ? "▶" : "▼"
-    }
-  }
-}
-
-;(window as any).toggleToolOutput = function(toggle: HTMLElement): void {
-  const content = toggle.parentElement
-  if (content) {
-    content.toggleAttribute("data-collapsed")
-  }
+  const div = document.createElement("div")
+  div.textContent = text
+  return div.innerHTML
 }
 
 window.addEventListener("message", (event) => {
@@ -516,6 +495,12 @@ window.addEventListener("message", (event) => {
       console.log("[init] Switching to session:", message.sessionId, "Previous:", currentSessionId)
       currentSessionId = message.sessionId || null
       currentSessionTitle = message.sessionTitle || "New Session"
+      
+      // 更新 agent 名称
+      if (message.agent) {
+        currentAgentName = message.agent
+      }
+      
       const titleEl = document.getElementById("sessionTitle")
       if (titleEl) titleEl.textContent = currentSessionTitle
 
@@ -530,7 +515,8 @@ window.addEventListener("message", (event) => {
         const lastMsg = processedMessages[processedMessages.length - 1]
         if (lastMsg && lastMsg.role === "assistant" && msg.role === "assistant") {
           lastMsg.parts = [...(lastMsg.parts || []), ...(msg.parts || [])]
-          lastMsg.id = msg.id // Keep the latest ID
+          lastMsg.id = msg.id
+          if (msg.agent) lastMsg.agent = msg.agent
         } else {
           processedMessages.push({ ...msg })
         }
@@ -542,9 +528,8 @@ window.addEventListener("message", (event) => {
 
       console.log("[init] Initialized with", messages.length, "messages, sessionId:", currentSessionId)
 
-      // Enable undo if there are messages and it's a real session
       canUndo = messages.length > 0 && !!currentSessionId && !currentSessionId.startsWith("temp_")
-      canRedo = false // Reset redo state on init
+      canRedo = false
       updateUndoRedoButtons()
 
       if (currentSessionId) {
@@ -559,7 +544,10 @@ window.addEventListener("message", (event) => {
         break
       }
       
-      // Check if we should merge this message into the previous one in the messages array
+      if (message.agent) {
+        currentAgentName = message.agent
+      }
+      
       const lastMsg = messages[messages.length - 1]
       const shouldMerge = lastMsg && 
                         lastMsg.role === "assistant" && 
@@ -570,18 +558,16 @@ window.addEventListener("message", (event) => {
       renderMessage(message)
 
       if (shouldMerge) {
-        // Merge parts into the last message
         lastMsg.parts = [...(lastMsg.parts || []), ...(message.parts || [])]
-        // Update the ID to the latest one
         lastMsg.id = message.id
+        if (message.agent) lastMsg.agent = message.agent
       } else {
         messages.push(message)
       }
 
-      // Enable undo when new message arrives
       if (currentSessionId && !currentSessionId.startsWith("temp_")) {
         canUndo = true
-        canRedo = false // New message clears redo history
+        canRedo = false
         updateUndoRedoButtons()
       }
       break
@@ -610,7 +596,6 @@ window.addEventListener("message", (event) => {
     case "sessionIdle":
       messagesContainer.querySelectorAll(".reasoning-container").forEach(r => {
         r.setAttribute("data-collapsed", "true")
-        updateCollapseIcon(r as HTMLElement)
       })
       break
 
@@ -634,18 +619,14 @@ window.addEventListener("message", (event) => {
     case "revertSuccess":
       console.log("[Webview] Revert successful", message)
       
-      // Clear current messages display
       messagesContainer.innerHTML = ""
       
-      // Update local messages array to remaining messages
       if (message.remainingMessages) {
         messages = message.remainingMessages
       }
       
-      // Re-render all remaining messages
       messages.forEach(renderMessage)
       
-      // Restore user message to input box for editing
       if (message.userMessageToRestore) {
         messageInput.innerHTML = ""
         insertText(message.userMessageToRestore)
@@ -660,18 +641,14 @@ window.addEventListener("message", (event) => {
     case "unrevertSuccess":
       console.log("[Webview] Unrevert (redo) successful", message)
       
-      // Clear current messages display
       messagesContainer.innerHTML = ""
       
-      // Update local messages array to all messages
       if (message.allMessages) {
         messages = message.allMessages
       }
       
-      // Re-render all messages
       messages.forEach(renderMessage)
       
-      // Clear input box on redo (since we're restoring the conversation)
       messageInput.innerHTML = ""
       
       canUndo = true
@@ -681,7 +658,6 @@ window.addEventListener("message", (event) => {
 
     case "error":
       console.error("[Webview] Error:", message.error)
-      // Re-enable buttons on error
       updateUndoRedoButtons()
       break
   }
@@ -695,7 +671,7 @@ function updateSelectors(agents: string[], modelGroups: Array<{ providerID: stri
   agents.forEach(agent => {
     const option = document.createElement("option")
     option.value = agent
-    option.textContent = agent
+    option.textContent = formatAgentName(agent)
     if (agent === currentAgent) option.selected = true
     agentSelect.appendChild(option)
   })
@@ -759,15 +735,11 @@ function showFileSuggestions(suggestions: any[]): void {
 }
 
 function insertFileMention(path: string, lineRange?: string): void {
-  // Use the saved range from currentMention if available
-  // This is crucial because when clicking on a suggestion, the focus/selection changes
   let range: Range | null = null
   
   if (currentMention?.savedRange) {
-    // Clone the saved range to avoid modifying the original
     range = currentMention.savedRange.cloneRange()
   } else {
-    // Fallback to current selection
     const selection = window.getSelection()
     if (!selection || !selection.rangeCount) return
     range = selection.getRangeAt(0)
@@ -775,15 +747,11 @@ function insertFileMention(path: string, lineRange?: string): void {
   
   if (!range) return
   
-  // Restore focus to messageInput first
   messageInput.focus()
   
-  // Delete the @searchTerm text before inserting
-  // Use the saved startOffset from currentMention
   if (currentMention) {
     const deleteRange = document.createRange()
     
-    // Find the text node containing the @ symbol using the saved startOffset
     let currentOffset = 0
     let startNode: Text | null = null
     let startOffsetInNode = 0
@@ -806,14 +774,11 @@ function insertFileMention(path: string, lineRange?: string): void {
       deleteRange.setEnd(range.endContainer, range.endOffset)
       deleteRange.deleteContents()
       
-      // After deletion, the range might be empty or at the wrong place.
-      // We should use the deleteRange's start position for insertion.
       range.setStart(deleteRange.startContainer, deleteRange.startOffset)
       range.setEnd(deleteRange.startContainer, deleteRange.startOffset)
     }
   }
 
-  // Create the file mention element
   const mentionSpan = document.createElement("span")
   mentionSpan.className = "file-mention"
   mentionSpan.setAttribute("data-path", path)
@@ -830,66 +795,28 @@ function insertFileMention(path: string, lineRange?: string): void {
     mentionSpan.appendChild(rangeSpan)
   }
 
-  // Insert the mention at the correct position (after deletion, before focus restoration)
-  // We use the range that was set to the deletion point
   range.insertNode(mentionSpan)
   
-  // Move cursor after the mention and add a space
   range.setStartAfter(mentionSpan)
   range.setEndAfter(mentionSpan)
   
-  // Add a space after the mention
   const spaceNode = document.createTextNode(" ")
   range.insertNode(spaceNode)
   
-  // Move cursor after the space
   range.setStartAfter(spaceNode)
   range.setEndAfter(spaceNode)
   
-  // Now restore the selection with the updated range
   const newSelection = window.getSelection()
   if (newSelection) {
     newSelection.removeAllRanges()
     newSelection.addRange(range)
   }
   
-  // Add click handler to select the entire mention
   mentionSpan.addEventListener("click", (e) => {
     e.preventDefault()
     e.stopPropagation()
     selectMention(mentionSpan)
   })
-}
-
-function getOffsetOfNode(node: Node): number {
-  let offset = 0
-  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null)
-  let currentNode: Text | null = null
-  while (currentNode = walker.nextNode() as Text) {
-    if (currentNode === node) {
-      return offset
-    }
-    offset += currentNode.textContent?.length || 0
-  }
-  return offset
-}
-
-function getCursorPosition(): number {
-  const selection = window.getSelection()
-  if (!selection || !selection.rangeCount) return 0
-  
-  const range = selection.getRangeAt(0)
-  let position = 0
-  
-  const walker = document.createTreeWalker(messageInput, NodeFilter.SHOW_TEXT, null)
-  let textNode: Text | null = null
-  while (textNode = walker.nextNode() as Text) {
-    if (textNode === range.startContainer) {
-      return position + range.startOffset
-    }
-    position += textNode.textContent?.length || 0
-  }
-  return position
 }
 
 function selectMention(mentionSpan: HTMLElement): void {
@@ -901,10 +828,8 @@ function selectMention(mentionSpan: HTMLElement): void {
   selection.removeAllRanges()
   selection.addRange(range)
   
-  // Add visual selection class
   mentionSpan.classList.add("selected")
   
-  // Remove selection class when clicking elsewhere
   const removeSelection = (e: Event) => {
     if (!mentionSpan.contains(e.target as Node)) {
       mentionSpan.classList.remove("selected")
@@ -917,7 +842,6 @@ function selectMention(mentionSpan: HTMLElement): void {
   }, 0)
 }
 
-// Add global double-click handler for file mentions
 messageInput.addEventListener("dblclick", (e) => {
   const target = e.target as HTMLElement
   const mentionElement = findMentionElement(target)
@@ -928,26 +852,23 @@ messageInput.addEventListener("dblclick", (e) => {
   }
 })
 
-function getTextNodeAtOffset(root: Node, offset: number): Text | null {
-  let currentOffset = 0
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null)
-  
-  let textNode: Text | null = null
-  while (textNode = walker.nextNode() as Text) {
-    const nodeLength = textNode.textContent?.length || 0
-    if (currentOffset + nodeLength >= offset) {
-      return textNode
+function findMentionElement(node: Node): HTMLElement | null {
+  let current: Node | null = node
+  while (current && current !== messageInput) {
+    if (current.nodeType === Node.ELEMENT_NODE) {
+      const el = current as HTMLElement
+      if (el.classList?.contains("file-mention")) {
+        return el
+      }
     }
-    currentOffset += nodeLength
+    current = current.parentNode
   }
-  
   return null
 }
 
 function insertText(text: string): void {
   const selection = window.getSelection()
   if (!selection || !selection.rangeCount) {
-    // Check if the text is a file mention (starts with @ and looks like a path)
     const fileMentionMatch = text.match(/^@([^\s]+)(\s*)$/)
     if (fileMentionMatch) {
       const path = fileMentionMatch[1]
@@ -964,13 +885,11 @@ function insertText(text: string): void {
 
   const range = selection.getRangeAt(0)
   
-  // Check if the text is a file mention (starts with @ and looks like a path)
   const fileMentionMatch = text.match(/^@([^\s]+)(\s*)$/)
   if (fileMentionMatch) {
     const path = fileMentionMatch[1]
     const trailingSpace = fileMentionMatch[2]
     
-    // Create the file mention element
     const mentionSpan = document.createElement("span")
     mentionSpan.className = "file-mention"
     mentionSpan.setAttribute("data-path", path)
@@ -980,14 +899,11 @@ function insertText(text: string): void {
     const pathText = document.createTextNode(`@${path}`)
     mentionSpan.appendChild(pathText)
     
-    // Insert the mention
     range.insertNode(mentionSpan)
     
-    // Move cursor after the mention
     range.setStartAfter(mentionSpan)
     range.setEndAfter(mentionSpan)
     
-    // Add trailing space if present
     if (trailingSpace) {
       const spaceNode = document.createTextNode(trailingSpace)
       range.insertNode(spaceNode)
@@ -998,14 +914,12 @@ function insertText(text: string): void {
     selection.removeAllRanges()
     selection.addRange(range)
     
-    // Add click handler to select the entire mention
     mentionSpan.addEventListener("click", (e) => {
       e.preventDefault()
       e.stopPropagation()
       selectMention(mentionSpan)
     })
   } else {
-    // Regular text insertion
     const textNode = document.createTextNode(text)
     range.insertNode(textNode)
     
@@ -1017,7 +931,6 @@ function insertText(text: string): void {
 }
 
 function insertFileMentionAtEnd(path: string, lineRange?: string): void {
-  // Create the file mention element
   const mentionSpan = document.createElement("span")
   mentionSpan.className = "file-mention"
   mentionSpan.setAttribute("data-path", path)
@@ -1034,10 +947,8 @@ function insertFileMentionAtEnd(path: string, lineRange?: string): void {
     mentionSpan.appendChild(rangeSpan)
   }
   
-  // Append to messageInput
   messageInput.appendChild(mentionSpan)
   
-  // Add click handler to select the entire mention
   mentionSpan.addEventListener("click", (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -1103,7 +1014,6 @@ messageInput.addEventListener("keydown", (e) => {
     return
   }
 
-  // Handle Ctrl+Z for undo
   if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
     e.preventDefault()
     if (!undoButton.disabled) {
@@ -1112,7 +1022,6 @@ messageInput.addEventListener("keydown", (e) => {
     return
   }
 
-  // Handle Ctrl+Y or Ctrl+Shift+Z for redo
   if ((e.key === "y" && (e.ctrlKey || e.metaKey)) ||
       (e.key === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey)) {
     e.preventDefault()
@@ -1122,7 +1031,6 @@ messageInput.addEventListener("keydown", (e) => {
     return
   }
 
-  // Handle Backspace and Delete for file mentions
   if (e.key === "Backspace") {
     handleBackspace(e)
   } else if (e.key === "Delete") {
@@ -1136,9 +1044,7 @@ function handleBackspace(e: KeyboardEvent): void {
   
   const range = selection.getRangeAt(0)
   
-  // First check if there's a selected mention (not collapsed selection)
   if (!range.collapsed) {
-    // Check if the selection contains or is within a file mention
     const container = range.commonAncestorContainer
     const mentionElement = findMentionElement(container)
     if (mentionElement) {
@@ -1149,7 +1055,6 @@ function handleBackspace(e: KeyboardEvent): void {
     return
   }
   
-  // Check if cursor is immediately after a file mention
   let nodeBefore: Node | null = null
   
   if (range.startContainer.nodeType === Node.TEXT_NODE) {
@@ -1160,14 +1065,12 @@ function handleBackspace(e: KeyboardEvent): void {
     nodeBefore = messageInput.childNodes[range.startOffset - 1] || null
   }
   
-  // Check if the previous sibling is a file mention
   if (nodeBefore && nodeBefore.nodeType === Node.ELEMENT_NODE && (nodeBefore as HTMLElement).classList?.contains("file-mention")) {
     e.preventDefault()
     ;(nodeBefore as HTMLElement).remove()
     return
   }
   
-  // Check if we're inside a file mention (shouldn't happen with contenteditable="false", but just in case)
   const parent = range.startContainer.parentElement
   if (parent && parent.classList?.contains("file-mention")) {
     e.preventDefault()
@@ -1181,9 +1084,7 @@ function handleDelete(e: KeyboardEvent): void {
   
   const range = selection.getRangeAt(0)
   
-  // First check if there's a selected mention (not collapsed selection)
   if (!range.collapsed) {
-    // Check if the selection contains or is within a file mention
     const container = range.commonAncestorContainer
     const mentionElement = findMentionElement(container)
     if (mentionElement) {
@@ -1194,42 +1095,24 @@ function handleDelete(e: KeyboardEvent): void {
     return
   }
   
-  // Check if cursor is immediately before a file mention
   let nodeAfter = range.startContainer.nextSibling
   
-  // If we're at the end of a text node, check the next sibling
   const textLength = range.startContainer.textContent?.length || 0
   if (range.startOffset >= textLength && range.startContainer !== messageInput) {
     nodeAfter = range.startContainer.nextSibling
   }
   
-  // Check if the next sibling is a file mention
   if (nodeAfter && (nodeAfter as HTMLElement).classList?.contains("file-mention")) {
     e.preventDefault()
     nodeAfter.remove()
     return
   }
   
-  // Check if we're inside a file mention (shouldn't happen with contenteditable="false", but just in case)
   const parent = range.startContainer.parentElement
   if (parent && parent.classList?.contains("file-mention")) {
     e.preventDefault()
     parent.remove()
   }
-}
-
-function findMentionElement(node: Node): HTMLElement | null {
-  let current: Node | null = node
-  while (current && current !== messageInput) {
-    if (current.nodeType === Node.ELEMENT_NODE) {
-      const el = current as HTMLElement
-      if (el.classList?.contains("file-mention")) {
-        return el
-      }
-    }
-    current = current.parentNode
-  }
-  return null
 }
 
 function sendMessage(): void {
@@ -1268,7 +1151,6 @@ function getMessageText(): string {
       } else if (el.tagName === "BR") {
         text += "\n"
       } else if (el.tagName === "DIV") {
-        // Handle div elements (new lines in contenteditable)
         if (text && !text.endsWith("\n")) {
           text += "\n"
         }
@@ -1290,7 +1172,6 @@ messageInput.addEventListener("input", (e) => {
   const range = selection.getRangeAt(0)
   const textContent = messageInput.textContent || ""
   
-  // Get the text before the cursor
   let textBeforeCursor = ""
   const selectionForOffset = window.getSelection()
   if (selectionForOffset && selectionForOffset.rangeCount > 0) {
@@ -1301,14 +1182,12 @@ messageInput.addEventListener("input", (e) => {
     textBeforeCursor = preRange.toString()
   }
   
-  // Check for mention pattern
   const mentionMatch = textBeforeCursor.match(/@([^\s]*)$/)
   
   if (mentionMatch) {
     const searchTerm = mentionMatch[1]
     const startOffset = textBeforeCursor.length - mentionMatch[0].length
     
-    // Save the current range for later use when inserting
     const savedRange = range.cloneRange()
     
     currentMention = {

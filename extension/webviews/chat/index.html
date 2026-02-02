@@ -86,7 +86,7 @@
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 24px;
     }
 
     .messages:empty::before {
@@ -99,50 +99,86 @@
       font-style: italic;
     }
 
-    /* Message container */
+    /* Message container - 简洁无卡片设计 */
     .message {
       display: flex;
-      gap: 12px;
-      padding: 12px;
-      border-radius: 8px;
-      background-color: var(--vscode-editor-inactiveSelectionBackground);
+      flex-direction: column;
+      gap: 8px;
     }
 
     .message.user {
-      background-color: var(--vscode-textBlockQuote-background);
+      align-items: flex-end;
     }
 
-    .message-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 6px;
+    .message.assistant {
+      align-items: flex-start;
+    }
+
+    /* Agent Header - 图标 + 名称 */
+    .agent-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .agent-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      background-color: var(--vscode-editor-background);
-      border: 1px solid var(--vscode-panel-border);
-      flex-shrink: 0;
+      font-size: 14px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+    }
+
+    .agent-name {
+      color: var(--vscode-foreground);
+    }
+
+    /* User 消息样式 */
+    .message.user .message-content {
+      background-color: var(--vscode-textBlockQuote-background);
+      padding: 12px 16px;
+      border-radius: 12px 12px 0 12px;
+      max-width: 80%;
+    }
+
+    /* Assistant 消息内容 - 无背景 */
+    .message.assistant .message-content {
+      background: transparent;
+      padding: 0;
+      max-width: 100%;
     }
 
     .message-content {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .message-role {
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground);
-      margin-bottom: 4px;
-      font-weight: 500;
+      line-height: 1.6;
     }
 
     .message-text {
-      line-height: 1.6;
       white-space: pre-wrap;
       word-wrap: break-word;
       font-size: 14px;
     }
+
+    .message-text p {
+      margin-bottom: 8px;
+    }
+
+    .message-text p:last-child {
+      margin-bottom: 0;
+    }
+
+    .message-text h1, .message-text h2, .message-text h3, .message-text h4 {
+      margin: 16px 0 8px 0;
+      font-weight: 600;
+    }
+
+    .message-text h1 { font-size: 1.5em; }
+    .message-text h2 { font-size: 1.3em; }
+    .message-text h3 { font-size: 1.1em; }
 
     .message-text code {
       background-color: var(--vscode-textCodeBlock-background);
@@ -165,82 +201,99 @@
       padding: 0;
     }
 
-    /* Reasoning Box Styles */
+    /* Reasoning 思考过程 - 可折叠标签式 */
     .reasoning-container {
       margin: 12px 0;
-      padding: 10px;
-      border: 1px solid var(--vscode-widget-border);
-      border-radius: 6px;
-      background-color: var(--vscode-editor-background);
-      font-size: 13px;
       display: flex;
       flex-direction: column;
     }
 
-    .reasoning-header {
-      display: flex;
+    .reasoning-toggle {
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 6px;
-      user-select: none;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-
-    .reasoning-header:hover {
-      opacity: 1;
-    }
-
-    .collapse-icon {
+      gap: 6px;
+      padding: 4px 10px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+      border-radius: 4px;
       font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      user-select: none;
+      width: fit-content;
+      transition: background-color 0.2s;
+    }
+
+    .reasoning-toggle:hover {
+      background-color: var(--vscode-editor-selectionBackground);
+    }
+
+    .reasoning-toggle-icon {
+      font-size: 10px;
       transition: transform 0.2s ease;
+    }
+
+    .reasoning-container[data-collapsed="false"] .reasoning-toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .reasoning-content {
+      margin-top: 8px;
+      padding: 12px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--vscode-descriptionForeground);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      line-height: 1.6;
     }
 
     .reasoning-container[data-collapsed="true"] .reasoning-content {
       display: none;
     }
 
-    .reasoning-content {
+    /* Thought 步骤 - 单个思考节点 */
+    .thought-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--vscode-panel-border);
+    }
+
+    .thought-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+
+    .thought-icon {
+      font-size: 12px;
       color: var(--vscode-descriptionForeground);
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      line-height: 1.5;
-      max-height: 150px;
-      overflow-y: auto;
+      margin-top: 2px;
     }
 
-    /* Tool execution */
+    .thought-content {
+      flex: 1;
+      color: var(--vscode-foreground);
+    }
 
-    .tool-execution {
-      margin-top: 12px;
-      padding: 12px;
-      border-radius: 6px;
+    /* Tool 工具调用 - 简洁卡片 */
+    .tool-item {
+      margin: 12px 0;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      overflow: hidden;
       background-color: var(--vscode-editor-background);
-      border-left: 3px solid var(--vscode-charts-blue);
-    }
-
-    .tool-execution.error {
-      border-left-color: var(--vscode-errorForeground);
-    }
-
-    .tool-execution.completed {
-      border-left-color: var(--vscode-testing-iconPassed);
-    }
-
-    .tool-execution.running {
-      border-left-color: var(--vscode-editorInfo-foreground);
-    }
-
-    .tool-execution.pending {
-      border-left-color: var(--vscode-descriptionForeground);
     }
 
     .tool-header {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
+      padding: 10px 12px;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+      border-bottom: 1px solid var(--vscode-panel-border);
     }
 
     .tool-icon {
@@ -249,33 +302,116 @@
 
     .tool-name {
       font-weight: 600;
-      font-size: 13px;
+      font-size: 12px;
+      flex: 1;
     }
 
-    .tool-state {
+    .tool-status {
       font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background-color: var(--vscode-editor-background);
+    }
+
+    .tool-status.running {
+      color: var(--vscode-editorInfo-foreground);
+    }
+
+    .tool-status.completed {
+      color: var(--vscode-testing-iconPassed);
+    }
+
+    .tool-status.error {
+      color: var(--vscode-errorForeground);
+    }
+
+    .tool-status.pending {
       color: var(--vscode-descriptionForeground);
-      margin-left: auto;
+    }
+
+    .tool-command-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background-color: var(--vscode-editor-background);
     }
 
     .tool-command {
       font-family: var(--vscode-editor-font-family);
       font-size: 12px;
       color: var(--vscode-textLink-foreground);
-      margin-left: 4px;
+    }
+
+    .tool-auto-run {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .tool-output-container {
+      border-top: 1px solid var(--vscode-panel-border);
+    }
+
+    .tool-output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+    }
+
+    .tool-output-header:hover {
+      background-color: var(--vscode-editor-selectionBackground);
+    }
+
+    .tool-output-toggle {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+
+    .tool-output-container[data-collapsed="false"] .tool-output-toggle {
+      transform: rotate(180deg);
     }
 
     .tool-output {
+      padding: 12px;
+      background-color: var(--vscode-terminal-background);
+      color: var(--vscode-terminal-foreground);
       font-family: var(--vscode-editor-font-family);
       font-size: 12px;
-      color: var(--vscode-terminal-foreground);
-      background-color: var(--vscode-terminal-background);
-      padding: 12px;
-      border-radius: 4px;
-      max-height: 300px;
+      max-height: 400px;
       overflow-y: auto;
       white-space: pre-wrap;
-      line-height: 1.5;
+      word-wrap: break-word;
+    }
+
+    .tool-output-container[data-collapsed="true"] .tool-output {
+      display: none;
+    }
+
+    /* File reference 文件引用 */
+    .file-reference {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      margin: 8px 0;
+      background-color: var(--vscode-editor-inactiveSelectionBackground);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+    }
+
+    .file-reference:hover {
+      background-color: var(--vscode-editor-selectionBackground);
+    }
+
+    .file-reference-icon {
+      font-size: 12px;
     }
 
     /* Input area */
