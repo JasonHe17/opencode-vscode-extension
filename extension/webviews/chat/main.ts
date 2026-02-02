@@ -805,6 +805,11 @@ function insertFileMention(path: string, lineRange?: string): void {
       deleteRange.setStart(startNode, startOffsetInNode)
       deleteRange.setEnd(range.endContainer, range.endOffset)
       deleteRange.deleteContents()
+      
+      // After deletion, the range might be empty or at the wrong place.
+      // We should use the deleteRange's start position for insertion.
+      range.setStart(deleteRange.startContainer, deleteRange.startOffset)
+      range.setEnd(deleteRange.startContainer, deleteRange.startOffset)
     }
   }
 
@@ -825,28 +830,27 @@ function insertFileMention(path: string, lineRange?: string): void {
     mentionSpan.appendChild(rangeSpan)
   }
 
-  // Get the current selection after deletion and focus restoration
+  // Insert the mention at the correct position (after deletion, before focus restoration)
+  // We use the range that was set to the deletion point
+  range.insertNode(mentionSpan)
+  
+  // Move cursor after the mention and add a space
+  range.setStartAfter(mentionSpan)
+  range.setEndAfter(mentionSpan)
+  
+  // Add a space after the mention
+  const spaceNode = document.createTextNode(" ")
+  range.insertNode(spaceNode)
+  
+  // Move cursor after the space
+  range.setStartAfter(spaceNode)
+  range.setEndAfter(spaceNode)
+  
+  // Now restore the selection with the updated range
   const newSelection = window.getSelection()
-  if (newSelection && newSelection.rangeCount > 0) {
-    const newRange = newSelection.getRangeAt(0)
-    
-    // Insert the mention
-    newRange.insertNode(mentionSpan)
-    
-    // Move cursor after the mention and add a space
-    newRange.setStartAfter(mentionSpan)
-    newRange.setEndAfter(mentionSpan)
-    
-    // Add a space after the mention
-    const spaceNode = document.createTextNode(" ")
-    newRange.insertNode(spaceNode)
-    
-    // Move cursor after the space
-    newRange.setStartAfter(spaceNode)
-    newRange.setEndAfter(spaceNode)
-    
+  if (newSelection) {
     newSelection.removeAllRanges()
-    newSelection.addRange(newRange)
+    newSelection.addRange(range)
   }
   
   // Add click handler to select the entire mention
@@ -1146,17 +1150,20 @@ function handleBackspace(e: KeyboardEvent): void {
   }
   
   // Check if cursor is immediately after a file mention
-  let nodeBefore = range.startContainer.previousSibling
+  let nodeBefore: Node | null = null
   
-  // If we're at the start of a text node, check the previous sibling
-  if (range.startOffset === 0 && range.startContainer !== messageInput) {
-    nodeBefore = range.startContainer.previousSibling
+  if (range.startContainer.nodeType === Node.TEXT_NODE) {
+    if (range.startOffset === 0) {
+      nodeBefore = range.startContainer.previousSibling
+    }
+  } else if (range.startContainer === messageInput) {
+    nodeBefore = messageInput.childNodes[range.startOffset - 1] || null
   }
   
   // Check if the previous sibling is a file mention
-  if (nodeBefore && (nodeBefore as HTMLElement).classList?.contains("file-mention")) {
+  if (nodeBefore && nodeBefore.nodeType === Node.ELEMENT_NODE && (nodeBefore as HTMLElement).classList?.contains("file-mention")) {
     e.preventDefault()
-    nodeBefore.remove()
+    ;(nodeBefore as HTMLElement).remove()
     return
   }
   
@@ -1285,10 +1292,14 @@ messageInput.addEventListener("input", (e) => {
   
   // Get the text before the cursor
   let textBeforeCursor = ""
-  const preRange = document.createRange()
-  preRange.setStart(messageInput, 0)
-  preRange.setEnd(range.endContainer, range.endOffset)
-  textBeforeCursor = preRange.toString()
+  const selectionForOffset = window.getSelection()
+  if (selectionForOffset && selectionForOffset.rangeCount > 0) {
+    const rangeForOffset = selectionForOffset.getRangeAt(0)
+    const preRange = document.createRange()
+    preRange.setStart(messageInput, 0)
+    preRange.setEnd(rangeForOffset.endContainer, rangeForOffset.endOffset)
+    textBeforeCursor = preRange.toString()
+  }
   
   // Check for mention pattern
   const mentionMatch = textBeforeCursor.match(/@([^\s]*)$/)

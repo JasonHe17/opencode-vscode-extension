@@ -53710,6 +53710,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
         deleteRange.setStart(startNode, startOffsetInNode);
         deleteRange.setEnd(range.endContainer, range.endOffset);
         deleteRange.deleteContents();
+        range.setStart(deleteRange.startContainer, deleteRange.startOffset);
+        range.setEnd(deleteRange.startContainer, deleteRange.startOffset);
       }
     }
     const mentionSpan = document.createElement("span");
@@ -53725,18 +53727,17 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       rangeSpan.textContent = lineRange;
       mentionSpan.appendChild(rangeSpan);
     }
+    range.insertNode(mentionSpan);
+    range.setStartAfter(mentionSpan);
+    range.setEndAfter(mentionSpan);
+    const spaceNode = document.createTextNode(" ");
+    range.insertNode(spaceNode);
+    range.setStartAfter(spaceNode);
+    range.setEndAfter(spaceNode);
     const newSelection = window.getSelection();
-    if (newSelection && newSelection.rangeCount > 0) {
-      const newRange = newSelection.getRangeAt(0);
-      newRange.insertNode(mentionSpan);
-      newRange.setStartAfter(mentionSpan);
-      newRange.setEndAfter(mentionSpan);
-      const spaceNode = document.createTextNode(" ");
-      newRange.insertNode(spaceNode);
-      newRange.setStartAfter(spaceNode);
-      newRange.setEndAfter(spaceNode);
+    if (newSelection) {
       newSelection.removeAllRanges();
-      newSelection.addRange(newRange);
+      newSelection.addRange(range);
     }
     mentionSpan.addEventListener("click", (e) => {
       e.preventDefault();
@@ -53927,11 +53928,15 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       }
       return;
     }
-    let nodeBefore = range.startContainer.previousSibling;
-    if (range.startOffset === 0 && range.startContainer !== messageInput) {
-      nodeBefore = range.startContainer.previousSibling;
+    let nodeBefore = null;
+    if (range.startContainer.nodeType === Node.TEXT_NODE) {
+      if (range.startOffset === 0) {
+        nodeBefore = range.startContainer.previousSibling;
+      }
+    } else if (range.startContainer === messageInput) {
+      nodeBefore = messageInput.childNodes[range.startOffset - 1] || null;
     }
-    if (nodeBefore && nodeBefore.classList?.contains("file-mention")) {
+    if (nodeBefore && nodeBefore.nodeType === Node.ELEMENT_NODE && nodeBefore.classList?.contains("file-mention")) {
       e.preventDefault();
       nodeBefore.remove();
       return;
@@ -54034,10 +54039,14 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     const range = selection.getRangeAt(0);
     const textContent = messageInput.textContent || "";
     let textBeforeCursor = "";
-    const preRange = document.createRange();
-    preRange.setStart(messageInput, 0);
-    preRange.setEnd(range.endContainer, range.endOffset);
-    textBeforeCursor = preRange.toString();
+    const selectionForOffset = window.getSelection();
+    if (selectionForOffset && selectionForOffset.rangeCount > 0) {
+      const rangeForOffset = selectionForOffset.getRangeAt(0);
+      const preRange = document.createRange();
+      preRange.setStart(messageInput, 0);
+      preRange.setEnd(rangeForOffset.endContainer, rangeForOffset.endOffset);
+      textBeforeCursor = preRange.toString();
+    }
     const mentionMatch = textBeforeCursor.match(/@([^\s]*)$/);
     if (mentionMatch) {
       const searchTerm = mentionMatch[1];
